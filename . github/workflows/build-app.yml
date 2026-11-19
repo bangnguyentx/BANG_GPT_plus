@@ -1,0 +1,187 @@
+name: Build & Release Android APK (Chat GPT)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Tải mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài đặt Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cài đặt Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Chuẩn bị www, phiên bản & cấu hình Capacitor 6
+        env:
+          BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
+          GITHUB_REPO: ${{ github.repository }}
+          RUN_NUM: ${{ github.run_number }}
+        run: |
+          mkdir -p www
+          if [ -f "index.html" ] && [ ! -f "www/index.html" ]; then
+            cp index.html www/index.html
+          fi
+          if [ -f "skills-pack.js" ] && [ ! -f "www/skills-pack.js" ]; then
+            cp skills-pack.js www/skills-pack.js
+          fi
+
+          # Nhúng versionCode, versionName, repo GitHub & Backend URL vào app
+          node -e '
+            const fs = require("fs");
+            const verCode = 10 + parseInt(process.env.RUN_NUM || "1", 10);
+            const verName = `2.0.${process.env.RUN_NUM || "1"}`;
+            const repo = process.env.GITHUB_REPO || "bangnguyentx/BANG_GPT";
+            const apiUrl = (process.env.BACKEND_API_URL || "").trim();
+            let html = fs.readFileSync("www/index.html", "utf8");
+            html = html
+              .replace(/__APP_VERSION_CODE__/g, String(verCode))
+              .replace(/__APP_VERSION_NAME__/g, verName)
+              .replace(/__GITHUB_REPO__/g, repo)
+              .replace(/__DEFAULT_WORKER_URL__/g, apiUrl);
+            fs.writeFileSync("www/index.html", html);
+            console.log("Injected:", { verCode, verName, repo, hasApiUrl: !!apiUrl });
+          '
+
+          npm init -y
+          npm install @capacitor/core@6.2.0 @capacitor/cli@6.2.0 @capacitor/android@6.2.0
+          npx cap add android
+
+      - name: Chuẩn bị Keystore ký cố định (để bấm Cập nhật không cần xóa bản cũ)
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          PASS="${KS_PASS:-BangChatGPT2026!}"
+          ALIAS="${KEY_ALIAS:-chatgptkey}"
+          KPASS="${KEY_PASS:-$PASS}"
+          echo "KS_PASS=$PASS" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
+          echo "KEY_PASS=$KPASS" >> $GITHUB_ENV
+
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
+            echo "generated=false" >> $GITHUB_OUTPUT
+            echo "Đã nạp Keystore cố định từ GitHub Secrets."
+          else
+            echo "Chưa có Secret ANDROID_KEYSTORE_BASE64 -> tự tạo Keystore mới để bạn lưu vào Secrets."
+            keytool -genkey -v -keystore android/app/release.jks \
+              -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$PASS" -keypass "$KPASS" \
+              -dname "CN=ChatGPT, OU=App, O=BangDev, L=HungYen, S=VN, C=VN"
+            mkdir -p keystore-export
+            base64 -w 0 android/app/release.jks > keystore-export/ANDROID_KEYSTORE_BASE64.txt
+            echo "generated=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Cấu hình AndroidManifest, versionCode tăng tự động & Signing Release
+        env:
+          RUN_NUM: ${{ github.run_number }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const verCode = 10 + parseInt(process.env.RUN_NUM || "1", 10);
+            const verName = `2.0.${process.env.RUN_NUM || "1"}`;
+
+            // 1. AndroidManifest permissions
+            const mPath = "android/app/src/main/AndroidManifest.xml";
+            let xml = fs.readFileSync(mPath, "utf8");
+            const perms = [
+              "android.permission.INTERNET",
+              "android.permission.RECORD_AUDIO",
+              "android.permission.CAMERA",
+              "android.permission.MODIFY_AUDIO_SETTINGS",
+              "android.permission.VIBRATE"
+            ];
+            for (const p of perms) {
+              if (!xml.includes(p)) {
+                xml = xml.replace("<application", `<uses-permission android:name="${p}" />\n    <application`);
+              }
+            }
+            if (!xml.includes("usesCleartextTraffic")) {
+              xml = xml.replace("<application", `<application android:usesCleartextTraffic="true"`);
+            }
+            fs.writeFileSync(mPath, xml);
+
+            // 2. Dark status bar / nav bar
+            const sPath = "android/app/src/main/res/values/styles.xml";
+            let styles = fs.readFileSync(sPath, "utf8");
+            if (!styles.includes("statusBarColor")) {
+              styles = styles.replace(
+                "</style>",
+                "    <item name=\"android:statusBarColor\">#05070e</item>\n        <item name=\"android:navigationBarColor\">#05070e</item>\n        <item name=\"android:windowBackground\">#05070e</item>\n    </style>"
+              );
+              fs.writeFileSync(sPath, styles);
+            }
+
+            // 3. build.gradle: auto versionCode + release signingConfig
+            const gPath = "android/app/build.gradle";
+            let gradle = fs.readFileSync(gPath, "utf8");
+            gradle = gradle.replace(/versionCode\s+\d+/, `versionCode ${verCode}`);
+            gradle = gradle.replace(/versionName\s+"[^"]+"/, `versionName "${verName}"`);
+            const signingBlock = `
+    signingConfigs {
+        release {
+            storeFile file("release.jks")
+            storePassword System.getenv("KS_PASS")
+            keyAlias System.getenv("KEY_ALIAS")
+            keyPassword System.getenv("KEY_PASS")
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release`;
+            gradle = gradle.replace(/buildTypes\s*\{\s*release\s*\{/, signingBlock);
+            fs.writeFileSync(gPath, gradle);
+          '
+          npx cap sync android
+
+      - name: Biên dịch Release APK đã ký
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../ChatGPT-v2.0.${{ github.run_number }}.apk
+
+      - name: Xuất Artifact APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatGPT-v2.0.${{ github.run_number }}-APK
+          path: ChatGPT-v2.0.${{ github.run_number }}.apk
+          retention-days: 30
+
+      - name: Xuất file Base64 Keystore (chỉ chạy lần đầu nếu chưa cài Secret)
+        if: steps.keystore.outputs.generated == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SAVE-TO-SECRET-ANDROID_KEYSTORE_BASE64
+          path: keystore-export/ANDROID_KEYSTORE_BASE64.txt
+          retention-days: 7
+
+      - name: Tự động tạo GitHub Release (cho In-App Updater trong App)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.${{ github.run_number }}
+          name: Chat GPT v2.0.${{ github.run_number }}
+          body: |
+            Bản cập nhật Chat GPT v2.0.${{ github.run_number }} (Build #${{ github.run_number }}).
+            Tải file APK bên dưới và bấm **Cập nhật** trực tiếp không cần gỡ bản cũ.
+          files: ChatGPT-v2.0.${{ github.run_number }}.apk
