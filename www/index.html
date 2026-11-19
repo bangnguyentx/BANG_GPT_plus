@@ -2460,11 +2460,12 @@ async function adminCreateKeys() {
   if (!r.ok) return showToast(data.error || "Lỗi tạo key");
   haptic("ok");
   const txt = data.created.join("\n");
+  window.__lastCreatedKeys = txt;
   openModal(`
     <h3 style="margin-bottom:8px;">Đã tạo ${data.created.length} Key mới</h3>
     <textarea class="field" rows="6" readonly style="font-family:ui-monospace,monospace;">${esc(txt)}</textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-      <button class="btn-p tap" onclick="copyText(\`${txt.replace(/`/g,"")}\`,'Đã copy toàn bộ Key');closeModal()">Sao chép tất cả</button>
+      <button class="btn-p tap" onclick="copyText(window.__lastCreatedKeys,'Đã copy toàn bộ Key');closeModal()">Sao chép tất cả</button>
     </div>`);
   loadAdminData();
 }
@@ -2516,12 +2517,13 @@ async function adminResolveReset(requestId, email) {
 function openManualMailHandoff(email, newPassword) {
   const mailText = `Xin chào,\n\nMật khẩu mới cho tài khoản Chat GPT (${email}) của bạn là:\n${newPassword}\n\nBạn hãy mở ứng dụng Chat GPT và đăng nhập bằng mật khẩu mới này nhé.`;
   const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent("Mật khẩu mới tài khoản Chat GPT")}&body=${encodeURIComponent(mailText)}`;
+  window.__lastMailText = mailText;
   openModal(`
     <h3 style="margin-bottom:6px;">✅ Đã cấp mật khẩu mới trên hệ thống</h3>
     <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px;">Tài khoản <b>${esc(email)}</b> đã được đổi sang mật khẩu dưới đây. Bạn sao chép hoặc bấm Mở Mail để tự tay gửi cho khách:</p>
     <div class="lg-card" style="padding:12px;border-radius:14px;text-align:center;font-family:ui-monospace,monospace;font-size:18px;font-weight:700;color:var(--green);margin-bottom:12px;">${esc(newPassword)}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn-s tap" style="flex:1;" onclick="copyText(${JSON.stringify(mailText)},'Đã copy mẫu tin nhắn')">Sao chép mẫu gửi</button>
+      <button class="btn-s tap" style="flex:1;" onclick="copyText(window.__lastMailText,'Đã copy mẫu tin nhắn')">Sao chép mẫu gửi</button>
       <a class="btn-p tap" style="flex:1;text-align:center;text-decoration:none;" href="${mailto}">✉ Mở ứng dụng Mail</a>
     </div>
     <button class="btn-s tap" style="width:100%;margin-top:8px;" onclick="closeModal()">Đóng</button>
