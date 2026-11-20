@@ -1,60 +1,340 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#07080c" />
+<title>Chat GPT</title>
+<link rel="icon" type="image/png" href="logo.png" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<div id="wallpaper"></div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-gate" class="gate-screen">
+  <div class="gate-card lg-float">
+    <div style="display:flex;justify-content:flex-end;">
+      <button class="icon-btn tap" onclick="openServerUrlModal()" aria-label="Cấu hình Server">
+        <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.82-.33 1.7 1.7 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.51 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .33-1.82 1.7 1.7 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.51-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.82.33h.08a1.7 1.7 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51h.08a1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.33 1.82v.08a1.7 1.7 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+      </button>
+    </div>
+
+    <div class="gate-brand">
+      <div class="gate-logo-frame">
+        <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="36" height="36" />
+      </div>
+      <h1 class="gate-title">Chat GPT</h1>
+      <p class="gate-sub">Đăng nhập hoặc tạo tài khoản để đồng bộ lịch sử trò chuyện</p>
+    </div>
+
+    <div style="display:flex;justify-content:center;">
+      <div class="seg-track lg-card" id="auth-seg">
+        <div class="seg-thumb" id="auth-thumb"></div>
+        <button class="seg-btn active" data-atab="login" onclick="setAuthTab('login')">Đăng nhập</button>
+        <button class="seg-btn" data-atab="register" onclick="setAuthTab('register')">Đăng ký</button>
+      </div>
+    </div>
+
+    <div id="form-login" style="display:flex;flex-direction:column;gap:8px;">
+      <div>
+        <label class="f-lbl" for="lg-email">Email</label>
+        <input id="lg-email" type="email" class="field" placeholder="name@gmail.com" autocomplete="email" />
+      </div>
+      <div>
+        <label class="f-lbl" for="lg-pass">Mật khẩu</label>
+        <input id="lg-pass" type="password" class="field" placeholder="Nhập mật khẩu" autocomplete="current-password" />
+      </div>
+      <button class="btn-p tap" style="width:100%;margin-top:8px;" onclick="submitLogin()">Đăng nhập</button>
+      <button class="btn-s tap" style="width:100%;border:none;background:transparent;color:var(--accent-ink);" onclick="openForgotModal()">Quên mật khẩu</button>
+    </div>
+
+    <div id="form-register" style="display:none;flex-direction:column;gap:8px;">
+      <div>
+        <label class="f-lbl" for="rg-email">Email</label>
+        <input id="rg-email" type="email" class="field" placeholder="name@gmail.com" />
+      </div>
+      <div>
+        <label class="f-lbl" for="rg-pass">Mật khẩu</label>
+        <input id="rg-pass" type="password" class="field" placeholder="Tối thiểu 6 ký tự" />
+      </div>
+      <div>
+        <label class="f-lbl" for="rg-pass2">Nhập lại mật khẩu</label>
+        <input id="rg-pass2" type="password" class="field" placeholder="Nhập lại mật khẩu" />
+      </div>
+      <button class="btn-p tap" style="width:100%;margin-top:8px;" onclick="submitRegister()">Đăng ký và tiếp tục</button>
+    </div>
+
+    <div id="auth-server-hint" style="text-align:center;font-size:12px;color:var(--ink-3);"></div>
+  </div>
+</div>
+
+<!-- KEY ACTIVATION GATE -->
+<div id="key-gate" class="gate-screen">
+  <div class="gate-card lg-float">
+    <div class="gate-brand">
+      <div class="gate-logo-frame">
+        <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="36" height="36" />
+      </div>
+      <h2 class="gate-title">Kích hoạt Key bản quyền</h2>
+      <p id="key-gate-desc" class="gate-sub">Mỗi Key gắn cố định cho một tài khoản Email. Nhập mã Key để tiếp tục.</p>
+    </div>
+
+    <div class="lg-card" style="padding:10px 14px;border-radius:14px;font-size:13px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="color:var(--ink-2);">Tài khoản</span>
+      <strong id="key-gate-email">-</strong>
+    </div>
+
+    <div>
+      <label class="f-lbl" for="key-activate-in">Mã Key kích hoạt</label>
+      <input id="key-activate-in" class="field" placeholder="BANG-1M-XXXX-XXXX" style="text-align:center;font-family:var(--font-mono);font-weight:500;" />
+    </div>
+
+    <button class="btn-p tap" style="width:100%;" onclick="submitActivateKey()">Kích hoạt ngay</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-s tap" style="flex:1;" onclick="refreshSession()">Kiểm tra lại</button>
+      <button class="btn-danger tap" style="flex:1;" onclick="logoutUser()">Đăng xuất</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP SHELL -->
+<div id="app">
+  <div id="scrim" onclick="toggleSidebar(false)"></div>
+
+  <aside id="sidebar">
+    <div class="sb-top">
+      <div class="brand-row">
+        <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="24" height="24" />
+        <span>Chat GPT</span>
+      </div>
+      <div style="display:flex;gap:2px;">
+        <button class="icon-btn tap" onclick="toggleAcc('sb-search-acc')" aria-label="Tìm kiếm">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
+        <button id="btn-close-menu" class="icon-btn tap" onclick="toggleSidebar(false)" aria-label="Đóng menu">
+          <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="sb-search-acc" class="acc-wrap">
+      <div class="acc-inner" style="padding-bottom:8px;">
+        <input id="sb-search" type="search" class="field" style="padding:8px 13px;border-radius:999px;" placeholder="Tìm cuộc trò chuyện" oninput="renderChatsList()" />
+      </div>
+    </div>
+
+    <div class="sb-scroll">
+      <button id="btn-open-admin" class="nav-row admin-row tap-soft" style="display:none;" onclick="openAdminPanel()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+        <span style="flex:1;font-weight:500;">Quản trị Admin</span>
+        <span id="admin-pending-pill" class="tag-st st-pending num" style="display:none;">0</span>
+      </button>
+
+      <button class="nav-row tap-soft" onclick="startNewChat()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <span>Cuộc trò chuyện mới</span>
+      </button>
+      <button class="nav-row tap-soft" onclick="switchView('customize')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>Kỹ năng</span>
+      </button>
+      <button class="nav-row tap-soft" onclick="switchView('library')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.8"/></svg>
+        <span>Thư viện</span>
+      </button>
+      <button class="nav-row tap-soft" onclick="switchView('import')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+        <span>Trí nhớ và huấn luyện</span>
+      </button>
+
+      <div class="sb-sec-head">
+        <button class="sb-sec-toggle tap" onclick="toggleAcc('nb-acc','chev-nb')">
+          <span>Sổ ghi chú</span>
+          <span id="chev-nb" class="chev rot"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+        </button>
+        <button class="mini-act tap" onclick="openNotebookModal()" aria-label="Sổ ghi chú mới">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div id="nb-acc" class="acc-wrap open">
+        <div class="acc-inner" id="sb-nb-list"></div>
+      </div>
+
+      <div class="sb-sec-head">
+        <button class="sb-sec-toggle tap" onclick="toggleAcc('chats-acc','chev-chats')">
+          <span id="filter-lbl">Lịch sử chat</span>
+          <span id="chev-chats" class="chev rot"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+        </button>
+        <button class="mini-act tap" onclick="cycleFilter()" aria-label="Lọc lịch sử">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4L3 5Z"/></svg>
+        </button>
+      </div>
+      <div id="chats-acc" class="acc-wrap open">
+        <div class="acc-inner" id="sb-chats-list"></div>
+      </div>
+    </div>
+
+    <div class="sb-foot">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer;" onclick="openSettingsSheet()">
+        <div class="avatar" id="sb-avatar">C</div>
+        <div style="min-width:0;">
+          <div id="sb-user-email" style="font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div>
+          <div id="sb-user-plan" style="font-size:12px;color:var(--ink-3);">Chưa đăng nhập</div>
+        </div>
+      </div>
+      <button class="icon-btn tap" onclick="openSettingsSheet()" aria-label="Cài đặt">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.82-.33 1.7 1.7 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.51 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .33-1.82 1.7 1.7 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.51-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.82.33h.08a1.7 1.7 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51h.08a1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.33 1.82v.08a1.7 1.7 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main id="main">
+    <header id="top-bar">
+      <div class="top-left">
+        <button id="btn-open-menu" class="icon-btn tap" onclick="toggleSidebar(true)" aria-label="Mở menu">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M4 8h16M4 16h16"/></svg>
+          <span id="menu-badge-dot" class="badge-dot num"></span>
+        </button>
+        <button id="btn-model-trigger" class="model-pill-btn tap" onclick="toggleModelDropdown(event)">
+          <span id="top-model-text">Neon Cao</span>
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+      <div class="top-right">
+        <button class="icon-btn tap" onclick="startNewChat()" aria-label="Cuộc trò chuyện mới">
+          <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+        </button>
+        <button id="btn-chat-more" class="icon-btn tap" onclick="toggleChatMore(event)" aria-label="Tùy chọn">
+          <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="model-dropdown" class="popover lg-float">
+      <div id="model-opts"></div>
+      <div class="div-line"></div>
+      <div style="padding:4px 10px;font-size:12px;color:var(--ink-3);font-weight:500;">Cấp độ tư duy</div>
+      <div id="thinking-opts"></div>
+    </div>
+
+    <div id="chat-more-popover" class="popover lg-float">
+      <button class="nav-row tap-soft" onclick="closePopovers(); openCanvasEmpty()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+        <span>Mở Canvas</span>
+      </button>
+      <button class="nav-row tap-soft" onclick="closePopovers(); checkAppUpdate(false)">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <span>Kiểm tra cập nhật</span>
+      </button>
+      <button class="nav-row tap-soft" onclick="closePopovers(); pinActiveChat()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 1 1-1h1V3H7v2h1a1 1 0 0 1 1 1Z"/></svg>
+        <span>Ghim đoạn chat</span>
+      </button>
+      <button class="nav-row tap-soft" style="color:#fca5a5;" onclick="closePopovers(); deleteActiveChat()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg>
+        <span>Xóa đoạn chat</span>
+      </button>
+    </div>
+
+    <!-- VIEW 1: CHAT -->
+    <section id="view-chat" class="view active">
+      <div id="memory-bar-wrap">
+        <div class="mem-pill-bar lg-float">
+          <button class="mem-bar-head tap-soft" onclick="toggleAcc('mem-bar-acc','chev-mem-bar')">
+            <span class="mem-bar-title">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>
+              <span id="mem-bar-label" class="num">Trí nhớ đang dùng (0 mục)</span>
+            </span>
+            <span id="chev-mem-bar" class="chev"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+          </button>
+          <div id="mem-bar-acc" class="acc-wrap">
+            <div class="acc-inner"><div class="mem-bar-body" id="mem-bar-content"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="chat-scroll">
+        <div class="chat-col">
+          <div id="empty-hero">
+            <div class="hero-logo-box lg-card">
+              <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="34" height="34" />
+            </div>
+            <h1 id="hero-title">Chúng ta nên bắt đầu từ đâu nhỉ?</h1>
+            <div class="status-chip lg-card">
+              <span class="dot-live"></span>
+              <span id="hero-quota-txt" class="num">Chat GPT · Đã sẵn sàng</span>
+            </div>
+          </div>
+          <div id="messages"></div>
+        </div>
+      </div>
+
+      <button id="btn-scroll-down" class="lg-float tap" onclick="scrollToBottom(true)" aria-label="Cuộn xuống mới nhất">
+        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14m0 0-6-6m6 6 6-6"/></svg>
+      </button>
+
+      <div id="composer-dock">
+        <div class="composer-inner">
+          <div id="at-popup" class="lg-float"></div>
+
+          <div class="composer-top-controls">
+            <div class="seg-track mode-seg lg-float" id="mode-seg">
+              <div class="seg-thumb" id="mode-thumb"></div>
+              <button class="seg-btn active" data-mode="chat" onclick="setWorkMode('chat')">Cuộc trò chuyện</button>
               <button class="seg-btn" data-mode="task" onclick="setWorkMode('task')">Nhiệm vụ</button>
             </div>
             <button id="btn-skill-stack" class="mini-toggle-pill lg-float tap" onclick="toggleAcc('skill-stack-acc','chev-sk')">
-              <span id="sk-stack-lbl">⚡ Skills</span>
-              <span id="chev-sk" class="chev"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <span id="sk-stack-lbl" class="num">Skills</span>
+              <span id="chev-sk" class="chev"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
             </button>
           </div>
 
-          <!-- Collapsible Skill Stack Strip (Đột phá 4A) -->
           <div id="skill-stack-acc" class="acc-wrap">
-            <div class="acc-inner">
-              <div class="skill-stack-strip" id="skill-stack-strip"></div>
-            </div>
+            <div class="acc-inner"><div class="skill-stack-strip" id="skill-stack-strip"></div></div>
           </div>
 
           <div id="chips-bar"></div>
 
           <div class="composer-pill lg-float">
-            <button id="btn-plus" class="plus-btn tap" onclick="openToolsSheet()" title="Thêm ảnh HD, tệp, video & công cụ">
-              <svg width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            <button id="btn-plus" class="plus-btn tap" onclick="openToolsSheet()" aria-label="Công cụ và đính kèm">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
             </button>
             <textarea id="prompt-in" rows="1" placeholder="Hỏi Chat GPT"></textarea>
-            <button id="btn-mic" class="mic-btn tap" onclick="toggleVoiceDictate()" title="Nhập giọng nói">
-              <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            <button id="btn-mic" class="mic-btn tap" onclick="toggleVoiceDictate()" aria-label="Nhập giọng nói">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
             </button>
-            <button id="btn-orb-send" class="orb-action-btn" onclick="handleOrbAction()" title="Voice / Gửi">
-              <svg id="ico-wave" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" viewBox="0 0 24 24"><path d="M5 10v4M9 7v10M13 5v14M17 8v8M21 11v2"/></svg>
-              <svg id="ico-send" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" viewBox="0 0 24 24" style="display:none;"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
-              <svg id="ico-stop" width="15" height="15" fill="currentColor" viewBox="0 0 24 24" style="display:none;"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>
+            <button id="btn-orb-send" class="orb-action-btn" onclick="handleOrbAction()" aria-label="Voice hoặc Gửi">
+              <svg id="ico-wave" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M5 10v4M9 7v10M13 5v14M17 8v8M21 11v2"/></svg>
+              <svg id="ico-send" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" style="display:none;"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
+              <svg id="ico-stop" width="14" height="14" fill="currentColor" viewBox="0 0 24 24" style="display:none;"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>
             </button>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- VIEW 2: ADMIN DASHBOARD (FULL CONTROL) -->
+    <!-- VIEW 2: ADMIN -->
     <section id="view-admin" class="view">
       <div class="page-body">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;">
           <div>
             <h2 class="p-title" style="margin:0;">Quản trị Admin</h2>
-            <div style="font-size:12px;color:var(--ink-2);">Toàn quyền Key · Email · Quên MK · API/Model · Giới hạn gói</div>
+            <div style="font-size:12.5px;color:var(--ink-3);">Quản lý Key, Email, Quên mật khẩu, API và Giới hạn gói</div>
           </div>
           <div style="display:flex;gap:6px;">
-            <button class="btn-s tap" onclick="loadAdminData()">↻ Tải lại</button>
+            <button class="btn-s tap" onclick="loadAdminData()">Tải lại</button>
             <button class="btn-p tap" onclick="switchView('chat')">Đóng</button>
           </div>
         </div>
-
         <div class="admin-tabs">
-          <button class="admin-tab active tap" data-adtab="keys" onclick="setAdminTab('keys')">🔑 Tạo & QL Key</button>
-          <button class="admin-tab tap" data-adtab="users" onclick="setAdminTab('users')">👤 Tài khoản Email</button>
-          <button class="admin-tab tap" data-adtab="resets" onclick="setAdminTab('resets')">📩 Quên MK <span id="tab-rst-count"></span></button>
-          <button class="admin-tab tap" data-adtab="api" onclick="setAdminTab('api')">⚡ API & Model</button>
-          <button class="admin-tab tap" data-adtab="limits" onclick="setAdminTab('limits')">🛡 Giới hạn gói</button>
+          <button class="admin-tab active tap" data-adtab="keys" onclick="setAdminTab('keys')">Key bản quyền</button>
+          <button class="admin-tab tap" data-adtab="users" onclick="setAdminTab('users')">Tài khoản Email</button>
+          <button class="admin-tab tap" data-adtab="resets" onclick="setAdminTab('resets')">Quên mật khẩu <span id="tab-rst-count" class="num"></span></button>
+          <button class="admin-tab tap" data-adtab="api" onclick="setAdminTab('api')">API và Model</button>
+          <button class="admin-tab tap" data-adtab="limits" onclick="setAdminTab('limits')">Giới hạn gói</button>
         </div>
-
         <div id="admin-body"></div>
       </div>
     </section>
@@ -63,14 +343,14 @@
     <section id="view-customize" class="view">
       <div class="page-body">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <button class="btn-s tap" onclick="switchView('chat')">← Quay lại</button>
+          <button class="btn-s tap" onclick="switchView('chat')">Quay lại</button>
           <div style="display:flex;gap:8px;">
             <button class="btn-s tap" onclick="document.getElementById('in-skill-file').click()">Nhập tệp</button>
-            <button class="btn-p tap" onclick="openSkillEditor()">+ Tạo kỹ năng</button>
+            <button class="btn-p tap" onclick="openSkillEditor()">Tạo kỹ năng</button>
           </div>
         </div>
         <h2 class="p-title">Kỹ năng Chat GPT</h2>
-        <p class="p-sub">Đã tích hợp sẵn 4 bộ tinh hoa từ file bạn gửi (<code>@hallmark</code>, <code>@taste-skill</code>, <code>@unslop</code>, <code>@material-design-3-ui</code>). Bật/tắt nhanh nhiều kỹ năng cùng lúc ở thanh <b>⚡ Skills</b>.</p>
+        <p class="p-sub">Đã tích hợp 4 bộ chuẩn: @hallmark, @taste-skill, @unslop và @material-design-3-ui. Bật nhanh nhiều kỹ năng cùng lúc ở thanh Skills.</p>
         <div id="customize-body"></div>
       </div>
     </section>
@@ -79,17 +359,17 @@
     <section id="view-skill-editor" class="view">
       <div class="page-body">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <button class="btn-s tap" onclick="switchView('customize','skills')">← Kỹ năng</button>
+          <button class="btn-s tap" onclick="switchView('customize')">Quay lại</button>
           <button class="btn-p tap" onclick="saveSkill()">Lưu kỹ năng</button>
         </div>
         <div class="card-item lg-card">
           <input type="hidden" id="sk-id" />
-          <label class="f-lbl">Tên kỹ năng (gọi bằng @tên)</label>
-          <input id="sk-name" class="field" placeholder="vd: code-pro" />
-          <label class="f-lbl">Mô tả</label>
-          <input id="sk-desc" class="field" placeholder="Mô tả kỹ năng" />
-          <label class="f-lbl">Chỉ dẫn hệ thống</label>
-          <textarea id="sk-prompt" class="field" rows="9" placeholder="Chỉ dẫn chi tiết cho Chat GPT..."></textarea>
+          <label class="f-lbl" for="sk-name">Tên kỹ năng</label>
+          <input id="sk-name" class="field" placeholder="code-pro" />
+          <label class="f-lbl" for="sk-desc">Mô tả</label>
+          <input id="sk-desc" class="field" placeholder="Mô tả ngắn gọn kỹ năng" />
+          <label class="f-lbl" for="sk-prompt">Chỉ dẫn hệ thống</label>
+          <textarea id="sk-prompt" class="field" rows="9" placeholder="Nhập chỉ dẫn chi tiết cho Chat GPT"></textarea>
         </div>
       </div>
     </section>
@@ -105,22 +385,22 @@
       </div>
     </section>
 
-    <!-- VIEW 6: MEMORY & TRAINING -->
+    <!-- VIEW 6: MEMORY -->
     <section id="view-import" class="view">
       <div class="page-body">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <h2 class="p-title" style="margin:0;">Trí nhớ & Huấn luyện</h2>
+          <h2 class="p-title" style="margin:0;">Trí nhớ và huấn luyện</h2>
           <button class="btn-s tap" onclick="switchView('chat')">Đóng</button>
         </div>
         <div class="card-item lg-card">
-          <strong style="display:block;margin-bottom:6px;">Thêm dữ kiện trí nhớ mới (đồng bộ theo Email)</strong>
-          <textarea id="mem-in" class="field" rows="4" placeholder="VD: Tôi thích trả lời ngắn gọn, tập trung thực chiến, code chuẩn mượt..."></textarea>
-          <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-            <button class="btn-p tap" onclick="addMemory()">+ Lưu trí nhớ</button>
+          <label class="f-lbl" for="mem-in" style="margin-top:0;">Thêm dữ kiện trí nhớ (đồng bộ theo Email)</label>
+          <textarea id="mem-in" class="field" rows="4" placeholder="Ví dụ: Trả lời ngắn gọn, tập trung thực chiến"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+            <button class="btn-p tap" onclick="addMemory()">Lưu trí nhớ</button>
           </div>
         </div>
         <div class="card-item lg-card">
-          <strong style="display:block;margin-bottom:8px;">Danh sách trí nhớ đang hoạt động</strong>
+          <strong style="display:block;font-size:14px;margin-bottom:8px;">Danh sách trí nhớ đang hoạt động</strong>
           <div id="mem-list"></div>
         </div>
       </div>
@@ -128,88 +408,88 @@
   </main>
 </div>
 
-<!-- BOTTOM SHEET 1: + TOOLS & HD IMAGE QUALITY -->
+<!-- TOOLS SHEET -->
 <div id="sheet-tools-bg" class="sheet-bg" onclick="if(event.target===this) closeToolsSheet()">
   <div id="sheet-tools" class="sheet">
     <div class="sheet-handle-area" data-drag="sheet-tools"><div class="sheet-handle"></div></div>
     <div class="sheet-body">
       <div class="circle-strip">
         <button class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-cam').click()">
-          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
           <span>Camera</span>
         </button>
         <button class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-img').click()">
-          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
           <span>Ảnh HD</span>
         </button>
         <button class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-doc').click()">
-          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           <span>Tệp</span>
         </button>
         <button class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-vid').click()">
-          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="5" width="15" height="14" rx="2.5"/><path d="m17 10 5-3v10l-5-3Z"/></svg>
-          <span>Video AI</span>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="15" height="14" rx="2.5"/><path d="m17 10 5-3v10l-5-3Z"/></svg>
+          <span>Video</span>
         </button>
         <button class="circle-tile lg-card tap" onclick="closeToolsSheet(); pickNotebookModal()">
-          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
-          <span>Notebooks</span>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+          <span>Ghi chú</span>
         </button>
       </div>
 
-      <div class="lg-card" style="padding:10px 12px;border-radius:16px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <span style="font-size:13px;color:var(--ink-2);">Chất lượng ảnh Vision:</span>
-        <div style="display:flex;gap:5px;">
-          <button class="btn-s tap" style="padding:5px 10px;font-size:11.5px;" data-iq="fast" onclick="setImgQuality('fast')">Nhanh</button>
-          <button class="btn-s tap" style="padding:5px 10px;font-size:11.5px;" data-iq="hd" onclick="setImgQuality('hd')">HD 2048px</button>
-          <button class="btn-s tap" style="padding:5px 10px;font-size:11.5px;" data-iq="ultra" onclick="setImgQuality('ultra')">Siêu nét</button>
+      <div class="lg-card" style="padding:10px 12px;border-radius:14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span style="font-size:13px;color:var(--ink-2);">Chất lượng ảnh</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-s tap" style="height:30px;padding:0 10px;font-size:12px;" data-iq="fast" onclick="setImgQuality('fast')">Nhanh</button>
+          <button class="btn-s tap" style="height:30px;padding:0 10px;font-size:12px;" data-iq="hd" onclick="setImgQuality('hd')">HD 2048px</button>
+          <button class="btn-s tap" style="height:30px;padding:0 10px;font-size:12px;" data-iq="ultra" onclick="setImgQuality('ultra')">Siêu nét</button>
         </div>
       </div>
 
-      <button class="s-row tap-soft" onclick="pickTool('image')"><span class="s-row-l"><span>🎨 Tạo hình ảnh</span></span><span class="pill-sub">API Thực</span></button>
-      <button class="s-row tap-soft" onclick="pickTool('canvas')"><span class="s-row-l"><span>🧩 Canvas chạy code</span></span><span class="pill-sub">Xem trước</span></button>
-      <button class="s-row tap-soft" onclick="pickTool('deep_research')"><span class="s-row-l"><span>🔬 Deep Research</span></span></button>
-      <button class="s-row tap-soft" onclick="pickTool('guided')"><span class="s-row-l"><span>🎓 Học có hướng dẫn</span></span></button>
+      <button class="s-row tap-soft" onclick="pickTool('image')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m21 15-4.5-4.5L5 21"/></svg><span>Tạo hình ảnh</span></span><span class="pill-sub">API</span></button>
+      <button class="s-row tap-soft" onclick="pickTool('canvas')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span>Canvas chạy code</span></span><span class="pill-sub">Xem trước</span></button>
+      <button class="s-row tap-soft" onclick="pickTool('deep_research')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></svg><span>Deep Research</span></span></button>
+      <button class="s-row tap-soft" onclick="pickTool('guided')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span>Học có hướng dẫn</span></span></button>
       <div class="s-row" onclick="togglePersonal()">
-        <span class="s-row-l"><span>🧠 Trí thông minh cá nhân & Cross-Chat</span></span>
+        <span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg><span>Trí thông minh cá nhân</span></span>
         <div id="sw-personal" class="sw on"></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- BOTTOM SHEET 2: SETTINGS -->
+<!-- SETTINGS SHEET -->
 <div id="sheet-settings-bg" class="sheet-bg" onclick="if(event.target===this) closeSettingsSheet()">
   <div id="sheet-settings" class="sheet">
     <div class="sheet-handle-area" data-drag="sheet-settings"><div class="sheet-handle"></div></div>
     <div class="sheet-body">
-      <div class="lg-card" style="padding:12px 14px;border-radius:18px;margin-bottom:6px;font-size:13px;">
-        <div style="display:flex;justify-content:space-between;"><strong id="set-email">-</strong><span class="tag-st st-active" id="set-plan">-</span></div>
+      <div class="lg-card" style="padding:12px 14px;border-radius:16px;margin-bottom:6px;font-size:13px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;"><strong id="set-email">-</strong><span class="tag-st st-active" id="set-plan">-</span></div>
         <div id="set-expiry" style="color:var(--ink-2);margin-top:4px;font-size:12px;"></div>
-        <div id="set-usage" style="color:var(--sky);margin-top:3px;font-size:12px;"></div>
+        <div id="set-usage" class="num" style="color:var(--accent-ink);margin-top:3px;font-size:12px;"></div>
       </div>
-      <button class="s-row tap-soft" onclick="closeSettingsSheet(); openAppearanceModal()"><span class="s-row-l"><span>✨ Giao diện Liquid Glass & Haptics</span></span><span>›</span></button>
-      <button class="s-row tap-soft" onclick="closeSettingsSheet(); checkAppUpdate(false)"><span class="s-row-l"><span>⬇ Kiểm tra cập nhật App (v__APP_VERSION_NAME__)</span></span><span>›</span></button>
-      <button class="s-row tap-soft" onclick="closeSettingsSheet(); openServerUrlModal()"><span class="s-row-l"><span>🌐 Địa chỉ Server Cloudflare</span></span><span>›</span></button>
-      <button class="s-row tap-soft" onclick="closeSettingsSheet(); showKeyGate(true)"><span class="s-row-l"><span>🔑 Nhập / Gia hạn Key mới</span></span></button>
-      <button class="s-row tap-soft" style="color:var(--red);" onclick="closeSettingsSheet(); logoutUser()"><span class="s-row-l"><span>⎋ Đăng xuất tài khoản</span></span></button>
+      <button class="s-row tap-soft" onclick="closeSettingsSheet(); openAppearanceModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2m10-10h-2M4 12H2"/></svg><span>Giao diện và hiệu năng</span></span><span style="color:var(--ink-3);">›</span></button>
+      <button class="s-row tap-soft" onclick="closeSettingsSheet(); checkAppUpdate(false)"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span>Kiểm tra cập nhật (v__APP_VERSION_NAME__)</span></span><span style="color:var(--ink-3);">›</span></button>
+      <button class="s-row tap-soft" onclick="closeSettingsSheet(); openServerUrlModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg><span>Địa chỉ Server Cloudflare</span></span><span style="color:var(--ink-3);">›</span></button>
+      <button class="s-row tap-soft" onclick="closeSettingsSheet(); showKeyGate(true)"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3"/></svg><span>Nhập hoặc gia hạn Key</span></span></button>
+      <button class="s-row tap-soft" style="color:#fca5a5;" onclick="closeSettingsSheet(); logoutUser()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Đăng xuất</span></span></button>
     </div>
   </div>
 </div>
 
 <!-- LIVE VOICE OVERLAY -->
 <div id="live-voice-ov">
-  <div style="text-align:center;">
-    <div style="font-size:13px;color:var(--sky);font-weight:600;letter-spacing:.05em;">CHAT GPT LIVE VOICE</div>
-    <div id="live-status" style="font-size:18px;margin-top:8px;">Đang lắng nghe...</div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;">
+    <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="32" height="32" />
+    <div id="live-status" style="font-size:17px;font-weight:500;">Đang lắng nghe</div>
   </div>
   <div class="voice-bars" id="live-bars">
     <div class="voice-bar" style="--b:0"></div><div class="voice-bar" style="--b:1"></div>
     <div class="voice-bar" style="--b:2"></div><div class="voice-bar" style="--b:3"></div><div class="voice-bar" style="--b:4"></div>
   </div>
   <div id="live-transcript" style="max-width:440px;text-align:center;font-size:14.5px;color:var(--ink-2);min-height:48px;"></div>
-  <div style="display:flex;gap:14px;">
+  <div style="display:flex;gap:12px;">
     <button class="btn-s tap" onclick="restartLiveListen()">Nói lại</button>
-    <button class="btn-p tap" style="background:#ef4444;color:#fff;" onclick="closeLiveVoice()">Kết thúc</button>
+    <button class="btn-p tap" style="background:var(--danger);color:#fff;" onclick="closeLiveVoice()">Kết thúc</button>
   </div>
 </div>
 
@@ -217,8 +497,8 @@
 <div id="canvas-ov">
   <div class="canvas-head">
     <div style="display:flex;align-items:center;gap:8px;">
-      <button class="btn-s tap" onclick="closeCanvas()">✕</button>
-      <strong id="canvas-title" style="font-size:14.5px;">Canvas</strong>
+      <button class="btn-s tap" onclick="closeCanvas()">Đóng</button>
+      <strong id="canvas-title" style="font-size:14.5px;font-weight:500;">Canvas</strong>
     </div>
     <div style="display:flex;gap:6px;">
       <button id="btn-cv-mode" class="btn-s tap" onclick="toggleCanvasMode()">Xem trước</button>
@@ -231,18 +511,17 @@
   </div>
 </div>
 
-<!-- GENERIC MODAL -->
+<!-- MODAL & TOAST -->
 <div id="modal-bg" class="modal-bg" onclick="if(event.target===this) closeModal()">
   <div id="modal-box" class="modal-box lg-float"></div>
 </div>
 
-<!-- TOAST -->
-<div id="toast" class="lg-float">
-  <span class="toast-star">✓</span>
+<div id="toast" class="lg-float" role="status" aria-live="polite">
+  <span class="toast-dot"><svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
   <span id="toast-msg">Đã lưu</span>
 </div>
 
-<!-- HIDDEN INPUTS -->
+<!-- HIDDEN FILE INPUTS -->
 <input id="in-cam" type="file" accept="image/*" capture="environment" hidden onchange="handleImages(this.files)" />
 <input id="in-img" type="file" accept="image/*" multiple hidden onchange="handleImages(this.files)" />
 <input id="in-vid" type="file" accept="video/*" hidden onchange="handleVideo(this.files)" />
@@ -250,1850 +529,15 @@
 <input id="in-skill-file" type="file" accept=".json,.md,.txt" hidden onchange="importSkillFile(this.files)" />
 <input id="in-wall" type="file" accept="image/*" hidden onchange="handleWallUpload(this.files)" />
 
-<script src="skills-pack.js"></script>
 <script>
-
-/* =========================================================================
-   CHAT GPT PRO APP v2 ENGINE
-   ========================================================================= */
-const APP_VERSION_CODE = Number("__APP_VERSION_CODE__") || 11;
-const APP_VERSION_NAME = "__APP_VERSION_NAME__".startsWith("__") ? "2.0.1" : "__APP_VERSION_NAME__";
-const GITHUB_REPO = "__GITHUB_REPO__".startsWith("__") ? "bangnguyentx/BANG_GPT" : "__GITHUB_REPO__";
-const BAKED_WORKER_URL = "__DEFAULT_WORKER_URL__".startsWith("__") ? "" : "__DEFAULT_WORKER_URL__";
-
-const THINK_LEVELS = [
-  { id: "low", title: "Thấp", sub: "Nhanh và gọn", prompt: "Trả lời ngắn gọn, trực diện." },
-  { id: "medium", title: "Trung bình", sub: "Cân bằng", prompt: "Phân tích cân bằng, dễ hiểu." },
-  { id: "high", title: "Cao", sub: "Suy luận sâu", prompt: "Suy luận kỹ lưỡng từng bước, kiểm tra kỹ mọi chi tiết." }
-];
-
-const PLAN_OPTIONS = [
-  ["week", "Tuần (7 ngày)"],
-  ["1m", "1 Tháng (30 ngày)"],
-  ["3m", "3 Tháng (90 ngày)"],
-  ["6m", "6 Tháng (180 ngày)"],
-  ["9m", "9 Tháng (270 ngày)"],
-  ["12m", "12 Tháng (365 ngày)"],
-  ["18m", "18 Tháng (540 ngày)"],
-  ["1y", "1 Năm (365 ngày)"],
-  ["2y", "2 Năm (730 ngày)"]
-];
-
-const DEFAULT_CFG = {
-  id: "cfg",
-  serverUrl: BAKED_WORKER_URL,
-  token: "",
-  deviceId: "",
-  selectedModel: "neon",
-  thinkingLevel: "high",
-  workMode: "chat",
-  personalIntel: true,
-  imgQuality: "hd", // fast | hd | ultra
-  ultraGlass: false,
-  haptics: true,
-  blurPx: 18,
-  glassAlpha: 0.74,
-  wallpaper: ""
+window.__APP_META__ = {
+  verCode: Number("__APP_VERSION_CODE__") || 15,
+  verName: "__APP_VERSION_NAME__".startsWith("__") ? "2.2.0" : "__APP_VERSION_NAME__",
+  repo: "__GITHUB_REPO__".startsWith("__") ? "bangnguyentx/BANG_GPT" : "__GITHUB_REPO__",
+  workerUrl: "__DEFAULT_WORKER_URL__".startsWith("__") ? "" : "__DEFAULT_WORKER_URL__"
 };
-
-/* ===== HAPTIC FEEDBACK (ĐỘT PHÁ 7A) ===== */
-function haptic(type = "tap") {
-  if (!S.cfg?.haptics || !navigator.vibrate) return;
-  const map = { tap: 8, switch: 14, ok: [10, 28, 14], err: [24, 40, 24] };
-  try { navigator.vibrate(map[type] || 8); } catch {}
-}
-
-/* ===== INDEXEDDB CACHE ===== */
-let db = null;
-function openDB() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open("ChatGPTProAppDB_v3", 1);
-    req.onupgradeneeded = e => {
-      const d = e.target.result;
-      ["chats", "skills", "notebooks", "memories", "library", "kv"].forEach(s => {
-        if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: "id" });
-      });
-    };
-    req.onsuccess = () => { db = req.result; res(db); };
-    req.onerror = () => rej(req.error);
-  });
-}
-const dbPut = (s, o) => new Promise((r, j) => { const tx = db.transaction(s,"readwrite"); tx.objectStore(s).put(o); tx.oncomplete=()=>r(o); tx.onerror=()=>j(tx.error); });
-const dbAll = (s) => new Promise((r, j) => { const q = db.transaction(s,"readonly").objectStore(s).getAll(); q.onsuccess=()=>r(q.result||[]); q.onerror=()=>j(q.error); });
-const dbGet = (s, id) => new Promise((r, j) => { const q = db.transaction(s,"readonly").objectStore(s).get(id); q.onsuccess=()=>r(q.result||null); q.onerror=()=>j(q.error); });
-const dbDel = (s, id) => new Promise((r, j) => { const tx = db.transaction(s,"readwrite"); tx.objectStore(s).delete(id); tx.oncomplete=()=>r(); tx.onerror=()=>j(tx.error); });
-
-let S = {
-  cfg: { ...DEFAULT_CFG },
-  user: null,
-  models: [
-    { id: "auto", title: "Tự động", sub: "Thích ứng thông minh", short: "Auto", mapped: "auto", badge: "", tier: "basic" },
-    { id: "hydrogen", title: "Trợ giúp hằng ngày", sub: "4 Hydrogen", short: "Hydrogen", mapped: "gpt-6-luna", badge: "", tier: "basic" },
-    { id: "neon", title: "Deeper analysis", sub: "4 Neon", short: "Neon", mapped: "gpt-6.2-sol", badge: "Mới", tier: "pro" },
-    { id: "carbon", title: "Code & complex work", sub: "4 Carbon", short: "Carbon", mapped: "gpt-6.2-astra", badge: "", tier: "pro" }
-  ],
-  chats: [], activeChatId: null,
-  skills: [], notebooks: [], activeNbId: null,
-  memories: [], lastCrossRecalls: [], library: [],
-  filter: "all", activeTool: null, skillIds: [], atts: [],
-  streaming: false, abort: null, speakingMsgId: null,
-  rec: null, recording: false, liveMode: false,
-  adminData: null, adminTab: "keys", selectedLimitPlan: "week",
-  canvasPreviewOnly: false
-};
-
-const esc = s => String(s || "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
-
-/* ===== BOOT ===== */
-async function boot() {
-  await openDB();
-  const saved = await dbGet("kv", "cfg");
-  if (saved) S.cfg = { ...DEFAULT_CFG, ...saved };
-  if (!S.cfg.serverUrl && BAKED_WORKER_URL) S.cfg.serverUrl = BAKED_WORKER_URL;
-  if (!S.cfg.deviceId) {
-    S.cfg.deviceId = "dev-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
-  }
-  await dbPut("kv", S.cfg);
-
-  // Load 4 Built-in Skills from skills-pack.js + User Custom Skills
-  const storedSkills = await dbAll("skills");
-  const builtins = Array.isArray(window.BUILTIN_SKILLS_PACK) ? window.BUILTIN_SKILLS_PACK : [];
-  for (const bsk of builtins) {
-    if (!storedSkills.some(x => x.id === bsk.id)) {
-      await dbPut("skills", bsk);
-      storedSkills.push(bsk);
-    }
-  }
-  S.skills = storedSkills;
-  S.notebooks = await dbAll("notebooks");
-  S.library = (await dbAll("library")).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  applyTheme();
-  renderSkillStack();
-  bindEvents();
-  bindDragSheets();
-  updateAuthServerHint();
-  setAuthTab("login");
-
-  if (!S.cfg.token || !S.cfg.serverUrl) {
-    showAuthGate(true);
-  } else {
-    await refreshSession();
-  }
-
-  // Silent background check for GitHub APK update
-  setTimeout(() => checkAppUpdate(true), 3500);
-}
-
-function applyTheme() {
-  document.body.classList.toggle("ultra-glass", Boolean(S.cfg.ultraGlass));
-  document.documentElement.style.setProperty("--blur", `${S.cfg.blurPx}px`);
-  document.documentElement.style.setProperty("--g-float", `rgba(24, 28, 38, ${S.cfg.glassAlpha})`);
-  const w = document.getElementById("wallpaper");
-  if (S.cfg.wallpaper) { w.style.backgroundImage = `url(${S.cfg.wallpaper})`; w.classList.add("custom"); }
-  else { w.style.backgroundImage = ""; w.classList.remove("custom"); }
-  document.querySelectorAll("[data-iq]").forEach(b => b.classList.toggle("lg-active", b.dataset.iq === S.cfg.imgQuality));
-}
-
-function toggleAcc(accId, chevId = null) {
-  haptic("tap");
-  const el = document.getElementById(accId);
-  if (!el) return;
-  const open = el.classList.toggle("open");
-  if (chevId) document.getElementById(chevId)?.classList.toggle("rot", open);
-}
-
-/* ===== BACKEND API CLIENT ===== */
-function getApiBase() {
-  return (S.cfg.serverUrl || "").trim().replace(/\/+$/, "");
-}
-
-async function apiFetch(path, { method = "GET", body = null, auth = true, signal = null } = {}) {
-  const base = getApiBase();
-  if (!base) throw new Error("Chưa cấu hình địa chỉ Server Cloudflare Worker (bấm biểu tượng bánh răng ⚙ để dán URL Worker).");
-  const headers = { "Content-Type": "application/json", "X-Device-Id": S.cfg.deviceId };
-  if (auth && S.cfg.token) headers["Authorization"] = `Bearer ${S.cfg.token}`;
-  const res = await fetch(`${base}${path}`, {
-    method, headers, body: body ? JSON.stringify(body) : null, signal
-  });
-  return res;
-}
-
-/* ===== AUTH, KEY GATE & FORGOT PASSWORD ===== */
-function updateAuthServerHint() {
-  const el = document.getElementById("auth-server-hint");
-  const base = getApiBase();
-  el.innerHTML = base
-    ? `Server: <span style="color:var(--green);">●</span> ${esc(base)}`
-    : `<span style="color:var(--amber);">⚠ Chưa dán URL Worker · Bấm icon ⚙ góc trên phải</span>`;
-}
-
-function setAuthTab(tab) {
-  haptic("tap");
-  const seg = document.getElementById("auth-seg");
-  const thumb = document.getElementById("auth-thumb");
-  seg.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.atab === tab));
-  const act = seg.querySelector(`.seg-btn[data-atab="${tab}"]`);
-  if (act && thumb) {
-    thumb.style.width = act.offsetWidth + "px";
-    thumb.style.transform = `translate3d(${act.offsetLeft - 3}px, 0, 0)`;
-  }
-  document.getElementById("form-login").style.display = tab === "login" ? "flex" : "none";
-  document.getElementById("form-register").style.display = tab === "register" ? "flex" : "none";
-}
-
-function showAuthGate(show) {
-  document.getElementById("auth-gate").classList.toggle("open", show);
-  if (show) {
-    document.getElementById("key-gate").classList.remove("open");
-    setTimeout(() => setAuthTab("login"), 40);
-  }
-}
-
-function showKeyGate(show, customMsg = null) {
-  const el = document.getElementById("key-gate");
-  el.classList.toggle("open", show);
-  if (show) {
-    document.getElementById("key-gate-email").textContent = S.user?.email || "-";
-    const desc = document.getElementById("key-gate-desc");
-    if (customMsg) desc.textContent = customMsg;
-    else if (S.user?.licenseReason === "KEY_EXPIRED") desc.textContent = "Key của bạn đã hết hạn sử dụng. Vui lòng nhập Key mới để tiếp tục dùng Chat GPT.";
-    else if (S.user?.licenseReason === "KEY_REVOKED") desc.textContent = "Key của bạn đã bị Quản trị viên thu hồi. Vui lòng liên hệ Admin hoặc nhập Key mới.";
-    else desc.textContent = "Mỗi Key chỉ kích hoạt cho đúng 1 tài khoản Email. Nhập mã Key để bắt đầu sử dụng Chat GPT.";
-  }
-}
-
-async function submitRegister() {
-  haptic("tap");
-  const email = document.getElementById("rg-email").value.trim();
-  const password = document.getElementById("rg-pass").value;
-  const confirmPassword = document.getElementById("rg-pass2").value;
-  if (!email || !password || !confirmPassword) return showToast("Nhập đầy đủ Email & Mật khẩu");
-  if (password !== confirmPassword) return showToast("Nhập lại mật khẩu không khớp");
-  try {
-    const r = await apiFetch("/auth/register", { method: "POST", auth: false, body: { email, password, confirmPassword, deviceId: S.cfg.deviceId } });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Đăng ký thất bại");
-    S.cfg.token = data.token;
-    await dbPut("kv", S.cfg);
-    await onSessionReady(data.user, data.models);
-    haptic("ok");
-    showToast("Đăng ký thành công! Hãy nhập Key kích hoạt");
-  } catch (e) { haptic("err"); showToast(e.message); }
-}
-
-async function submitLogin() {
-  haptic("tap");
-  const email = document.getElementById("lg-email").value.trim();
-  const password = document.getElementById("lg-pass").value;
-  if (!email || !password) return showToast("Nhập Email và Mật khẩu");
-  try {
-    const r = await apiFetch("/auth/login", { method: "POST", auth: false, body: { email, password, deviceId: S.cfg.deviceId } });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Đăng nhập thất bại");
-    S.cfg.token = data.token;
-    await dbPut("kv", S.cfg);
-    await onSessionReady(data.user, data.models);
-    haptic("ok");
-    showToast(`Xin chào ${data.user.email}`);
-  } catch (e) { haptic("err"); showToast(e.message); }
-}
-
-async function refreshSession() {
-  try {
-    const r = await apiFetch("/auth/me", { method: "GET" });
-    const data = await r.json();
-    if (!r.ok) {
-      if (r.status === 401 || r.status === 403) {
-        showToast(data.error || "Vui lòng đăng nhập lại");
-        S.cfg.token = "";
-        await dbPut("kv", S.cfg);
-        showAuthGate(true);
-        return;
-      }
-      throw new Error(data.error);
-    }
-    await onSessionReady(data.user, data.models);
-  } catch (e) {
-    showToast("Lỗi kết nối server: " + e.message);
-    if (!S.user) showAuthGate(true);
-  }
-}
-
-async function onSessionReady(user, models) {
-  S.user = user;
-  if (Array.isArray(models) && models.length) S.models = models;
-  showAuthGate(false);
-
-  if (!user.licenseActive && user.role !== "admin") {
-    showKeyGate(true);
-  } else {
-    showKeyGate(false);
-  }
-
-  // Sync user's personal chats & memories from Cloudflare D1
-  await pullCloudData();
-  syncAccountUI();
-  renderModelDropdown();
-  renderSidebar();
-  renderMemoryBar();
-  renderMessages();
-
-  if (user.role === "admin") {
-    loadAdminData(true);
-  }
-}
-
-async function submitActivateKey() {
-  haptic("tap");
-  const keyCode = document.getElementById("key-activate-in").value.trim();
-  if (!keyCode) return showToast("Vui lòng nhập mã Key");
-  try {
-    const r = await apiFetch("/auth/activate-key", { method: "POST", body: { keyCode } });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Kích hoạt thất bại");
-    document.getElementById("key-activate-in").value = "";
-    haptic("ok");
-    showToast(`Kích hoạt thành công gói ${data.user.planLabel}!`);
-    await onSessionReady(data.user, data.models);
-  } catch (e) { haptic("err"); showToast(e.message); }
-}
-
-function openForgotModal() {
-  haptic("tap");
-  openModal(`
-    <h3 style="margin-bottom:6px;">Quên mật khẩu</h3>
-    <p style="font-size:13px;color:var(--ink-2);margin-bottom:12px;">Nhập đúng Email đã đăng ký và mã Key đang gắn với Email đó để xác minh.</p>
-    <label class="f-lbl">Email quên mật khẩu</label>
-    <input id="fg-email" type="email" class="field" placeholder="name@gmail.com" />
-    <label class="f-lbl">Key của email đó</label>
-    <input id="fg-key" class="field" placeholder="VD: BANG-1M-XXXX-XXXX" />
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-      <button class="btn-s tap" onclick="closeModal()">Hủy</button>
-      <button class="btn-p tap" onclick="submitForgotPassword()">Xác nhận</button>
-    </div>
-  `);
-}
-
-async function submitForgotPassword() {
-  haptic("tap");
-  const email = document.getElementById("fg-email").value.trim();
-  const keyCode = document.getElementById("fg-key").value.trim();
-  if (!email || !keyCode) return showToast("Nhập đầy đủ Email và Key");
-  try {
-    const r = await apiFetch("/auth/forgot-password", { method: "POST", auth: false, body: { email, keyCode } });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Xác minh thất bại");
-    haptic("ok");
-    openModal(`
-      <div style="text-align:center;padding:8px 0;">
-        <div style="font-size:34px;margin-bottom:8px;">📩</div>
-        <h3 style="margin-bottom:8px;">Đã tiếp nhận yêu cầu</h3>
-        <p style="font-size:14.5px;color:#dbeafe;line-height:1.55;">${esc(data.message)}</p>
-        <button class="btn-p tap" style="width:100%;margin-top:16px;" onclick="closeModal()">Đã hiểu</button>
-      </div>
-    `);
-  } catch (e) { haptic("err"); showToast(e.message); }
-}
-
-async function logoutUser() {
-  haptic("tap");
-  S.cfg.token = "";
-  S.user = null;
-  S.chats = [];
-  S.memories = [];
-  S.activeChatId = null;
-  await dbPut("kv", S.cfg);
-  showKeyGate(false);
-  showAuthGate(true);
-  showToast("Đã đăng xuất");
-}
-
-function openServerUrlModal() {
-  haptic("tap");
-  openModal(`
-    <h3 style="margin-bottom:6px;">Địa chỉ Server Cloudflare Worker</h3>
-    <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px;">Dán link Worker (ví dụ <code>https://chatgpt-pro-api.tenban.workers.dev</code>) để kết nối tài khoản, Key & AI bảo mật.</p>
-    <input id="srv-url-in" class="field" value="${esc(S.cfg.serverUrl)}" placeholder="https://chatgpt-pro-api....workers.dev" />
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-      <button class="btn-s tap" onclick="closeModal()">Hủy</button>
-      <button class="btn-p tap" onclick="saveServerUrl()">Lưu & Kiểm tra</button>
-    </div>
-  `);
-}
-
-async function saveServerUrl() {
-  const val = document.getElementById("srv-url-in").value.trim().replace(/\/+$/, "");
-  if (!val.startsWith("http")) return showToast("URL phải bắt đầu bằng https://");
-  S.cfg.serverUrl = val;
-  await dbPut("kv", S.cfg);
-  updateAuthServerHint();
-  closeModal();
-  try {
-    const r = await fetch(val + "/health");
-    if (r.ok) { haptic("ok"); showToast("Kết nối Server thành công!"); }
-    else showToast("Server phản hồi HTTP " + r.status);
-  } catch (e) { haptic("err"); showToast("Không kết nối được: " + e.message); }
-}
-
-/* ===== CLOUD SYNC CHATS & MEMORIES PER ACCOUNT ===== */
-async function pullCloudData() {
-  try {
-    const [rc, rm] = await Promise.all([apiFetch("/sync/chats"), apiFetch("/sync/memories")]);
-    if (rc.ok) {
-      const dc = await rc.json();
-      S.chats = (dc.chats || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    }
-    if (rm.ok) {
-      const dm = await rm.json();
-      S.memories = dm.memories || [];
-    }
-  } catch {}
-}
-
-function syncAccountUI() {
-  const u = S.user;
-  if (!u) return;
-  document.getElementById("sb-user-email").textContent = u.email;
-  document.getElementById("sb-avatar").textContent = (u.email || "C").charAt(0).toUpperCase();
-  document.getElementById("sb-user-plan").textContent = u.planLabel || "Chưa kích hoạt";
-  document.getElementById("set-email").textContent = u.email;
-  document.getElementById("set-plan").textContent = u.planLabel || "Chưa kích hoạt";
-  document.getElementById("set-expiry").textContent = u.expiresAt
-    ? `Hết hạn: ${new Date(u.expiresAt).toLocaleString("vi-VN")}`
-    : (u.role === "admin" ? "Quyền Quản trị viên vĩnh viễn" : "Chưa có thời hạn");
-  document.getElementById("set-usage").textContent = u.role === "admin"
-    ? "Không giới hạn lượt & model"
-    : `Hôm nay: ${u.dailyMsgs}/${u.limits?.daily_msgs || 0} tin · ${Math.round((u.dailyTokens || 0)/1000)}K/${Math.round((u.limits?.daily_tokens || 0)/1000)}K token`;
-  document.getElementById("hero-quota-txt").textContent = u.role === "admin"
-    ? "Admin · Toàn quyền Chat GPT"
-    : `${u.planLabel} · Còn ${Math.max(0, (u.limits?.daily_msgs || 0) - u.dailyMsgs)} lượt hôm nay`;
-
-  document.getElementById("btn-open-admin").style.display = u.role === "admin" ? "flex" : "none";
-  document.getElementById("sw-personal").classList.toggle("on", S.cfg.personalIntel);
-  setWorkMode(S.cfg.workMode || "chat", false);
-}
-
-/* ===== 3-TIER MEMORY + CROSS-CHAT RECALL + COLLAPSIBLE MEMORY BAR (6C + ĐỘT PHÁ) ===== */
-function findCrossChatRecalls(queryText) {
-  if (!queryText || !S.cfg.personalIntel) return [];
-  const words = [...new Set(queryText.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(w => w.length >= 3))];
-  if (!words.length) return [];
-  const scored = [];
-  for (const c of S.chats) {
-    if (c.id === S.activeChatId) continue;
-    const msgs = c.messages || [];
-    for (let i = 0; i < msgs.length; i++) {
-      const txt = (msgs[i].text || "").toLowerCase();
-      if (!txt) continue;
-      let score = 0;
-      for (const w of words) if (txt.includes(w)) score += 1;
-      if (score >= 2 || (words.length <= 2 && score >= 1)) {
-        const nextAns = msgs[i].role === "user" && msgs[i + 1]?.role === "assistant" ? msgs[i + 1].text : "";
-        scored.push({
-          score,
-          chatTitle: c.title,
-          snippet: `${msgs[i].role === "user" ? "Hỏi" : "Đáp"}: ${(msgs[i].text || "").slice(0, 140)}${nextAns ? " → " + nextAns.slice(0, 140) : ""}`
-        });
-      }
-    }
-  }
-  return scored.sort((a, b) => b.score - a.score).slice(0, 3);
-}
-
-function buildRollingSummary(chat) {
-  const msgs = chat?.messages || [];
-  if (msgs.length <= 20) return "";
-  const older = msgs.slice(0, -20);
-  return older.map(m => `${m.role === "user" ? "U" : "A"}: ${(m.text || "").replace(/\s+/g, " ").slice(0, 95)}`).join(" | ").slice(0, 1800);
-}
-
-function renderMemoryBar() {
-  const activeMems = S.memories.filter(m => m.enabled !== false);
-  const recalls = S.lastCrossRecalls || [];
-  const chat = S.chats.find(c => c.id === S.activeChatId);
-  const hasRoll = (chat?.messages?.length || 0) > 20;
-  const total = activeMems.length + recalls.length + (hasRoll ? 1 : 0);
-
-  document.getElementById("mem-bar-label").textContent = S.cfg.personalIntel
-    ? `🧠 Trí nhớ đang dùng (${total} mục)`
-    : `🧠 Trí nhớ đang tắt`;
-
-  const body = document.getElementById("mem-bar-content");
-  let html = "";
-  if (hasRoll) {
-    html += `<div class="mem-chip-row"><span>📜 Tóm tắt cuộn (${chat.messages.length - 20} tin cũ trong đoạn chat này)</span><span class="tag-st st-active">Bật</span></div>`;
-  }
-  recalls.forEach(r => {
-    html += `<div class="mem-chip-row"><span>🔗 Gợi nhớ từ "${esc(r.chatTitle)}": ${esc(r.snippet.slice(0, 85))}...</span><span class="tag-st st-unused">Cross-Chat</span></div>`;
-  });
-  S.memories.forEach(m => {
-    html += `<div class="mem-chip-row">
-      <span style="flex:1;opacity:${m.enabled===false?0.45:1};">${esc(m.content.slice(0, 90))}</span>
-      <button class="btn-s tap" style="padding:3px 9px;font-size:11px;" onclick="toggleMemItem('${m.id}')">${m.enabled===false?"Tắt":"Bật"}</button>
-      <button class="mini-act tap" onclick="delMemory('${m.id}')">✕</button>
-    </div>`;
-  });
-  if (!html) html = `<div style="font-size:12.5px;color:var(--ink-3);padding:4px 2px;">Chưa có trí nhớ nào. Thêm trong mục Trí nhớ & Huấn luyện hoặc tiếp tục trò chuyện để Cross-Chat tự học.</div>`;
-  html += `<div style="display:flex;justify-content:flex-end;margin-top:4px;"><button class="btn-s tap" style="padding:5px 12px;font-size:12px;" onclick="switchView('import')">+ Quản lý trí nhớ</button></div>`;
-  body.innerHTML = html;
-}
-
-async function toggleMemItem(id) {
-  haptic("switch");
-  const m = S.memories.find(x => x.id === id);
-  if (!m) return;
-  m.enabled = m.enabled === false ? true : false;
-  await apiFetch("/sync/memories", { method: "POST", body: m }).catch(() => {});
-  renderMemoryBar();
-}
-
-/* ===== SKILL STACK BAR (4A + ĐỘT PHÁ) ===== */
-function renderSkillStack() {
-  const strip = document.getElementById("skill-stack-strip");
-  strip.innerHTML = S.skills.map(sk => {
-    const on = S.skillIds.includes(sk.id);
-    return `<button class="sk-pill tap ${on ? "on" : ""}" onclick="toggleSkillPill('${sk.id}')">@${esc(sk.name)}</button>`;
-  }).join("");
-  const btn = document.getElementById("btn-skill-stack");
-  const cnt = S.skillIds.length;
-  btn.classList.toggle("has-active", cnt > 0);
-  document.getElementById("sk-stack-lbl").textContent = cnt ? `⚡ Skills (${cnt})` : "⚡ Skills";
-}
-
-function toggleSkillPill(id) {
-  haptic("switch");
-  if (S.skillIds.includes(id)) S.skillIds = S.skillIds.filter(x => x !== id);
-  else S.skillIds.push(id);
-  renderSkillStack();
-  renderChips();
-}
-
-/* ===== HD VISION STUDIO: AUTO-LEVELS + UNSHARP MASK + CROP ZOOM (5A + 5B + ĐỘT PHÁ) ===== */
-function setImgQuality(q) {
-  haptic("tap");
-  S.cfg.imgQuality = q;
-  dbPut("kv", S.cfg);
-  applyTheme();
-  showToast(`Chất lượng Vision: ${q === "fast" ? "Nhanh 1024px" : q === "ultra" ? "Siêu nét gốc" : "HD 2048px"}`);
-}
-
-function processImageFile(file) {
-  const qMap = { fast: { max: 1024, q: 0.84 }, hd: { max: 2048, q: 0.92 }, ultra: { max: 2560, q: 0.96 } };
-  const allowHd = S.user?.role === "admin" || S.user?.limits?.allow_hd_vision !== false;
-  const preset = allowHd ? (qMap[S.cfg.imgQuality] || qMap.hd) : qMap.fast;
-
-  return new Promise((res, rej) => {
-    const img = new Image(), url = URL.createObjectURL(file);
-    img.onload = () => {
-      let { width: w, height: h } = img;
-      if (w > preset.max || h > preset.max) {
-        const r = Math.min(preset.max / w, preset.max / h);
-        w = Math.round(w * r); h = Math.round(h * r);
-      }
-      const c = document.createElement("canvas");
-      c.width = w; c.height = h;
-      const ctx = c.getContext("2d");
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(img, 0, 0, w, h);
-      const dataUrl = c.toDataURL("image/jpeg", preset.q);
-      URL.revokeObjectURL(url);
-      res({ dataUrl, w, h });
-    };
-    img.onerror = e => { URL.revokeObjectURL(url); rej(e); };
-    img.src = url;
-  });
-}
-
-// Real pixel-level Auto-Levels (2%–98% histogram stretch) + 3x3 Unsharp Mask Sharpening
-function enhanceCanvasPixels(ctx, w, h) {
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const d = imgData.data;
-  const hist = new Uint32Array(256);
-  const total = w * h;
-  for (let i = 0; i < d.length; i += 4) {
-    const lum = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
-    hist[lum]++;
-  }
-  let lo = 0, hi = 255, acc = 0;
-  for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc > total * 0.02) { lo = i; break; } }
-  acc = 0;
-  for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc > total * 0.02) { hi = i; break; } }
-  const span = Math.max(24, hi - lo);
-  const stretched = new Uint8ClampedArray(d.length);
-  for (let i = 0; i < d.length; i += 4) {
-    stretched[i] = ((d[i] - lo) * 255) / span;
-    stretched[i + 1] = ((d[i + 1] - lo) * 255) / span;
-    stretched[i + 2] = ((d[i + 2] - lo) * 255) / span;
-    stretched[i + 3] = d[i + 3];
-  }
-  // 3x3 Unsharp Mask (amount = 0.78)
-  const amt = 0.78;
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = (y * w + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        const blur = (
-          stretched[idx - 4 + c] + stretched[idx + 4 + c] +
-          stretched[idx - w * 4 + c] + stretched[idx + w * 4 + c] +
-          stretched[idx + c] * 2
-        ) / 6;
-        d[idx + c] = stretched[idx + c] + (stretched[idx + c] - blur) * amt;
-      }
-    }
-  }
-  ctx.putImageData(imgData, 0, 0);
-}
-
-let studioState = { attIndex: -1, imgObj: null, enhanced: false, cropOn: false, box: { x: 0.2, y: 0.2, w: 0.55, h: 0.55 } };
-
-function openVisionStudio(attIdx) {
-  const att = S.atts[attIdx];
-  if (!att || !att.dataUrl) return;
-  haptic("tap");
-  studioState = { attIndex: attIdx, imgObj: new Image(), enhanced: !!att.enhanced, cropOn: false, box: { x: 0.2, y: 0.2, w: 0.52, h: 0.52 } };
-
-  openModal(`
-    <h3 style="margin-bottom:6px;">HD Vision Studio</h3>
-    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Làm nét ảnh mờ/thiếu sáng hoặc khoanh vùng phóng to để AI soi chi tiết siêu chuẩn.</p>
-    <div class="vision-stage" id="v-stage">
-      <canvas id="v-canvas"></canvas>
-      <div id="crop-rect"><div id="crop-handle"></div></div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-      <button id="btn-enh" class="btn-s tap ${studioState.enhanced ? "lg-active" : ""}" style="flex:1;" onclick="toggleStudioEnhance()">✨ Làm rõ ảnh</button>
-      <button id="btn-crop-mode" class="btn-s tap" style="flex:1;" onclick="toggleStudioCrop()">🔍 Soi chi tiết</button>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-      <button class="btn-s tap" onclick="closeModal()">Đóng</button>
-      <button id="btn-crop-add" class="btn-blue tap" style="display:none;" onclick="commitStudioCrop()">+ Gửi kèm vùng soi</button>
-      <button class="btn-p tap" onclick="applyStudioEnhanced()">Áp dụng ảnh</button>
-    </div>
-  `);
-
-  studioState.imgObj.onload = () => {
-    drawStudioCanvas();
-    bindCropGestures();
-  };
-  studioState.imgObj.src = att.origDataUrl || att.dataUrl;
-}
-
-function drawStudioCanvas() {
-  const cv = document.getElementById("v-canvas");
-  const img = studioState.imgObj;
-  if (!cv || !img) return;
-  const maxW = 1280;
-  const sc = Math.min(1, maxW / img.width);
-  cv.width = Math.round(img.width * sc);
-  cv.height = Math.round(img.height * sc);
-  const ctx = cv.getContext("2d");
-  ctx.drawImage(img, 0, 0, cv.width, cv.height);
-  if (studioState.enhanced) enhanceCanvasPixels(ctx, cv.width, cv.height);
-  positionCropRect();
-}
-
-function toggleStudioEnhance() {
-  haptic("switch");
-  studioState.enhanced = !studioState.enhanced;
-  document.getElementById("btn-enh")?.classList.toggle("lg-active", studioState.enhanced);
-  drawStudioCanvas();
-}
-
-function toggleStudioCrop() {
-  haptic("switch");
-  studioState.cropOn = !studioState.cropOn;
-  document.getElementById("btn-crop-mode")?.classList.toggle("lg-active", studioState.cropOn);
-  document.getElementById("crop-rect").style.display = studioState.cropOn ? "block" : "none";
-  document.getElementById("btn-crop-add").style.display = studioState.cropOn ? "inline-flex" : "none";
-  positionCropRect();
-}
-
-function positionCropRect() {
-  const rect = document.getElementById("crop-rect");
-  const stage = document.getElementById("v-stage");
-  if (!rect || !stage || !studioState.cropOn) return;
-  const b = studioState.box;
-  rect.style.left = (b.x * 100) + "%";
-  rect.style.top = (b.y * 100) + "%";
-  rect.style.width = (b.w * 100) + "%";
-  rect.style.height = (b.h * 100) + "%";
-}
-
-function bindCropGestures() {
-  const rect = document.getElementById("crop-rect");
-  const handle = document.getElementById("crop-handle");
-  const stage = document.getElementById("v-stage");
-  if (!rect || !handle || !stage) return;
-  let mode = null, sx = 0, sy = 0, startBox = null;
-
-  rect.onpointerdown = e => {
-    mode = e.target === handle ? "resize" : "move";
-    sx = e.clientX; sy = e.clientY;
-    startBox = { ...studioState.box };
-    rect.setPointerCapture(e.pointerId);
-    e.stopPropagation();
-  };
-  rect.onpointermove = e => {
-    if (!mode) return;
-    const sr = stage.getBoundingClientRect();
-    const dx = (e.clientX - sx) / sr.width;
-    const dy = (e.clientY - sy) / sr.height;
-    if (mode === "move") {
-      studioState.box.x = Math.max(0, Math.min(1 - startBox.w, startBox.x + dx));
-      studioState.box.y = Math.max(0, Math.min(1 - startBox.h, startBox.y + dy));
-    } else {
-      studioState.box.w = Math.max(0.15, Math.min(1 - startBox.x, startBox.w + dx));
-      studioState.box.h = Math.max(0.15, Math.min(1 - startBox.y, startBox.h + dy));
-    }
-    positionCropRect();
-  };
-  rect.onpointerup = () => { mode = null; };
-}
-
-function applyStudioEnhanced() {
-  const att = S.atts[studioState.attIndex];
-  const cv = document.getElementById("v-canvas");
-  if (!att || !cv) return;
-  if (!att.origDataUrl) att.origDataUrl = att.dataUrl;
-  att.dataUrl = cv.toDataURL("image/jpeg", 0.93);
-  att.enhanced = studioState.enhanced;
-  renderChips();
-  closeModal();
-  haptic("ok");
-  showToast(studioState.enhanced ? "Đã làm nét ảnh HD" : "Đã giữ ảnh gốc");
-}
-
-function commitStudioCrop() {
-  const att = S.atts[studioState.attIndex];
-  const img = studioState.imgObj;
-  if (!att || !img) return;
-  const b = studioState.box;
-  const sx = Math.round(b.x * img.width), sy = Math.round(b.y * img.height);
-  const sw = Math.max(64, Math.round(b.w * img.width)), sh = Math.max(64, Math.round(b.h * img.height));
-  const outW = Math.min(1600, Math.max(sw, 900));
-  const outH = Math.round(outW * (sh / sw));
-  const c = document.createElement("canvas");
-  c.width = outW; c.height = outH;
-  const ctx = c.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
-  enhanceCanvasPixels(ctx, outW, outH);
-
-  S.atts.push({
-    id: "crop-" + Date.now(),
-    type: "image",
-    name: `Vùng soi HD (${att.name.slice(0, 10)})`,
-    dataUrl: c.toDataURL("image/jpeg", 0.94),
-    enhanced: true
-  });
-  renderChips();
-  updateOrbButton();
-  closeModal();
-  haptic("ok");
-  showToast("Đã gửi kèm vùng phóng to HD cho AI");
-}
-
-async function handleImages(files) {
-  for (const f of files || []) {
-    const p = await processImageFile(f);
-    S.atts.push({ id: "img-" + Date.now() + Math.random(), type: "image", name: f.name, dataUrl: p.dataUrl, origDataUrl: p.dataUrl, enhanced: false });
-    await saveLib("media", f.name, p.dataUrl);
-  }
-  renderChips(); updateOrbButton(); haptic("ok");
-  showToast("Đã đính kèm ảnh HD · Chạm vào ảnh để Làm rõ / Soi chi tiết");
-  document.getElementById("in-img").value = ""; document.getElementById("in-cam").value = "";
-}
-
-async function handleVideo(files) {
-  const f = files?.[0]; if (!f) return;
-  showToast("Đang tách 6 khung hình HD từ video...");
-  const v = document.createElement("video"), url = URL.createObjectURL(f);
-  v.muted = true; v.playsInline = true; v.src = url;
-  v.onloadedmetadata = async () => {
-    const dur = Math.max(v.duration || 1, 0.5);
-    const c = document.createElement("canvas");
-    const sc = Math.min(1, 960 / (v.videoWidth || 960));
-    c.width = Math.round((v.videoWidth || 640) * sc); c.height = Math.round((v.videoHeight || 360) * sc);
-    const ctx = c.getContext("2d");
-    const seek = t => new Promise(r => { v.onseeked = r; v.currentTime = Math.min(t, Math.max(0, dur - 0.1)); });
-    for (let i = 1; i <= 6; i++) {
-      const sec = Number(((dur / 7) * i).toFixed(1));
-      await seek(sec);
-      ctx.drawImage(v, 0, 0, c.width, c.height);
-      S.atts.push({ id: "vf-" + Date.now() + i, type: "video_frame", name: `${f.name} (${sec}s)`, dataUrl: c.toDataURL("image/jpeg", 0.82) });
-    }
-    URL.revokeObjectURL(url);
-    renderChips(); updateOrbButton(); haptic("ok");
-    showToast("Đã tách 6 khung hình HD cho AI xem");
-  };
-  document.getElementById("in-vid").value = "";
-}
-
-async function handleDocs(files) {
-  for (const f of files || []) {
-    S.atts.push({ id: "d-" + Date.now() + Math.random(), type: "file", name: f.name, text: (await f.text()).slice(0, 50000) });
-  }
-  renderChips(); updateOrbButton(); haptic("ok"); showToast(`Đã đính kèm ${files.length} tệp`);
-  document.getElementById("in-doc").value = "";
-}
-
-/* ===== MODEL DROPDOWN & CHAT ENGINE ===== */
-function renderModelDropdown() {
-  const m = S.models.find(x => x.id === S.cfg.selectedModel) || S.models[1] || S.models[0];
-  const t = THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel) || THINK_LEVELS[2];
-  document.getElementById("top-model-text").textContent = `${m.short || m.title} ${t.title}`;
-  const allowPro = S.user?.role === "admin" || S.user?.limits?.allow_pro_models !== false;
-
-  document.getElementById("model-opts").innerHTML = S.models.map(item => {
-    const locked = item.tier === "pro" && !allowPro;
-    const sel = item.id === S.cfg.selectedModel;
-    return `<button class="drop-opt tap-soft ${sel ? "selected" : ""} ${locked ? "locked" : ""}" onclick="pickModel('${item.id}',${locked})">
-      <span class="opt-check">${sel ? "✓" : (locked ? "🔒" : "")}</span>
-      <div class="opt-main">
-        <div class="opt-title">${esc(item.title)} ${item.badge ? `<span class="tag-new">${esc(item.badge)}</span>` : ""}</div>
-        <div class="opt-sub">${esc(item.sub || item.mapped)}${locked ? " · Cần gói Tháng/Năm" : ""}</div>
-      </div>
-    </button>`;
-  }).join("");
-
-  document.getElementById("thinking-opts").innerHTML = THINK_LEVELS.map(lv => {
-    const sel = lv.id === S.cfg.thinkingLevel;
-    return `<button class="drop-opt tap-soft ${sel ? "selected" : ""}" onclick="pickThink('${lv.id}')">
-      <span class="opt-check">${sel ? "✓" : ""}</span>
-      <div class="opt-main"><div class="opt-title">${lv.title}</div><div class="opt-sub">${lv.sub}</div></div>
-    </button>`;
-  }).join("");
-}
-
-function pickModel(id, locked) {
-  haptic("tap");
-  if (locked) return showToast("Gói Tuần chỉ dùng model cơ bản. Hãy nâng cấp gói Key.");
-  S.cfg.selectedModel = id; dbPut("kv", S.cfg); renderModelDropdown(); closePopovers();
-}
-function pickThink(id) { haptic("tap"); S.cfg.thinkingLevel = id; dbPut("kv", S.cfg); renderModelDropdown(); closePopovers(); }
-
-function buildSystemPrompt(chat, queryText, hasImages) {
-  const arr = ["Bạn là Chat GPT — trợ lý AI thông minh, trả lời tiếng Việt tự nhiên, sắc sảo và chính xác."];
-  if (hasImages) {
-    arr.push("PHÂN TÍCH THỊ GIÁC TOÀN DIỆN: Quan sát kỹ TOÀN BỘ nội dung hình ảnh — vật thể, bối cảnh, màu sắc, ánh sáng, bố cục, biểu cảm, chi tiết nhỏ, biểu đồ/đồ thị lẫn chữ viết. Không chỉ đọc chữ mà phải hiểu toàn cảnh và mô tả/phân tích chính xác mọi chi tiết thị giác.");
-  }
-  if (S.cfg.workMode === "task") arr.push("CHẾ ĐỘ NHIỆM VỤ: Chia nhỏ yêu cầu thành các bước thực thi cụ thể, có kết quả rõ ràng.");
-  const lv = THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel);
-  if (lv) arr.push(`Cấp độ tư duy (${lv.title}): ${lv.prompt}`);
-
-  if (S.cfg.personalIntel) {
-    const activeMems = S.memories.filter(m => m.enabled !== false);
-    if (activeMems.length) arr.push("TRÍ NHỚ DÀI HẠN CỦA NGƯỜI DÙNG:\n" + activeMems.map(m => "- " + m.content).join("\n"));
-    const rolling = buildRollingSummary(chat);
-    if (rolling) arr.push("TÓM TẮT NGỮ CẢNH CŨ TRONG ĐOẠN CHAT NÀY:\n" + rolling);
-    S.lastCrossRecalls = findCrossChatRecalls(queryText);
-    if (S.lastCrossRecalls.length) {
-      arr.push("GỢI NHỚ TỪ CÁC ĐOẠN CHAT CŨ KHÁC CỦA TÀI KHOẢN:\n" + S.lastCrossRecalls.map(r => `- [${r.chatTitle}] ${r.snippet}`).join("\n"));
-    }
-  } else {
-    S.lastCrossRecalls = [];
-  }
-
-  if (S.activeNbId) {
-    const nb = S.notebooks.find(n => n.id === S.activeNbId);
-    if (nb) arr.push(`SỔ GHI CHÚ "${nb.title}":\n${nb.notes}`);
-  }
-  S.skillIds.forEach(id => {
-    const sk = S.skills.find(x => x.id === id);
-    if (sk) arr.push(`KỸ NĂNG ĐANG BẬT (@${sk.name}):\n${sk.prompt}`);
-  });
-  if (S.activeTool === "canvas") arr.push("CANVAS: Xuất toàn bộ mã chạy độc lập trong 1 khối ```html ... ```.");
-  if (S.activeTool === "deep_research") arr.push("DEEP RESEARCH: Nghiên cứu đa chiều có bảng so sánh, phản biện và hành động cụ thể.");
-  if (S.activeTool === "guided") arr.push("HỌC CÓ HƯỚNG DẪN: Giải thích bản chất dễ hiểu kèm 1 câu hỏi kiểm tra tư duy.");
-  return arr.join("\n\n");
-}
-
-async function sendPrompt(overrideText = null) {
-  if (S.streaming) { S.abort?.abort(); return; }
-  if (!S.user) return showAuthGate(true);
-  if (!S.user.licenseActive && S.user.role !== "admin") return showKeyGate(true);
-
-  const input = document.getElementById("prompt-in");
-  const text = (overrideText !== null ? overrideText : input.value).trim();
-  if (!text && !S.atts.length) return;
-  haptic("tap");
-
-  [...text.matchAll(/@([a-zA-Z0-9_-]+)/g)].forEach(m => {
-    const sk = S.skills.find(s => s.name.toLowerCase() === m[1].toLowerCase());
-    if (sk && !S.skillIds.includes(sk.id)) S.skillIds.push(sk.id);
-  });
-  renderSkillStack();
-
-  let chat = S.chats.find(c => c.id === S.activeChatId);
-  if (!chat) {
-    chat = {
-      id: "c-" + Date.now(),
-      title: (text || S.atts[0]?.name || "Cuộc trò chuyện mới").slice(0, 42),
-      pinned: false, mode: S.cfg.workMode, nbId: S.activeNbId,
-      updatedAt: Date.now(), messages: []
-    };
-    S.chats.unshift(chat);
-    S.activeChatId = chat.id;
-  }
-
-  const sentAtts = [...S.atts];
-  chat.messages.push({ id: "m-" + Date.now(), role: "user", text, atts: sentAtts, ts: Date.now() });
-  chat.updatedAt = Date.now();
-
-  if (overrideText === null) { input.value = ""; autoGrow(); }
-  S.atts = [];
-  renderChips();
-  renderMessages();
-  renderChatsList();
-  scrollToBottom(true);
-
-  if (S.activeTool === "image") return runGenImage(chat, text);
-
-  const hasImgs = sentAtts.some(a => a.dataUrl);
-  const sysPrompt = buildSystemPrompt(chat, text, hasImgs);
-  renderMemoryBar();
-
-  const chosenUi = S.models.find(m => m.id === S.cfg.selectedModel) || S.models[1] || S.models[0];
-  let mappedModel = chosenUi.mapped;
-  if (chosenUi.id === "auto") {
-    const isCode = /(code|html|css|js|python|mql5|pine|debug|fix|api|sql|react|apk)/i.test(text);
-    const proMod = S.models.find(x => x.id === "carbon") || S.models.find(x => x.tier === "pro");
-    const midMod = S.models.find(x => x.id === "neon") || proMod;
-    const lowMod = S.models.find(x => x.id === "hydrogen") || S.models.find(x => x.tier === "basic");
-    mappedModel = (isCode || S.cfg.thinkingLevel === "high" || S.activeTool === "canvas")
-      ? (proMod?.mapped || "gpt-6.2-astra")
-      : (hasImgs || text.length > 260) ? (midMod?.mapped || "gpt-6.2-sol") : (lowMod?.mapped || "gpt-6-luna");
-  }
-
-  const aiMsg = {
-    id: "m-" + (Date.now() + 1),
-    role: "assistant", text: "",
-    modelLabel: `${chosenUi.short || chosenUi.title} ${THINK_LEVELS.find(x=>x.id===S.cfg.thinkingLevel)?.title}`,
-    slot: "", citedFile: sentAtts[0]?.name || "",
-    feedback: null, streaming: true, ts: Date.now()
-  };
-  chat.messages.push(aiMsg);
-  renderMessages();
-  scrollToBottom(true);
-
-  S.streaming = true;
-  S.abort = new AbortController();
-  updateOrbButton();
-
-  try {
-    // Tier 1 Memory: Last 20 messages verbatim + High-Detail Vision
-    const msgs = [{ role: "system", content: sysPrompt }];
-    for (const m of chat.messages.slice(0, -1).slice(-20)) {
-      if (m.role === "assistant") { msgs.push({ role: "assistant", content: m.text || "" }); continue; }
-      const imgs = (m.atts || []).filter(a => a.dataUrl);
-      const docs = (m.atts || []).filter(a => a.type === "file");
-      let txt = m.text || "";
-      if (docs.length) txt += "\n\n" + docs.map(d => `[TỆP ${d.name}]\n${d.text}`).join("\n\n");
-      if (imgs.length) {
-        const arr = [{ type: "text", text: txt || "Hãy phân tích chi tiết toàn bộ hình ảnh này (vật thể, bối cảnh, chi tiết nhỏ, màu sắc và cả chữ nếu có)." }];
-        imgs.forEach(im => arr.push({ type: "image_url", image_url: { url: im.dataUrl, detail: "high" } }));
-        msgs.push({ role: "user", content: arr });
-      } else msgs.push({ role: "user", content: txt });
-    }
-
-    const res = await apiFetch("/ai/chat", {
-      method: "POST",
-      body: { uiModelId: chosenUi.id, model: mappedModel, tool: S.activeTool, messages: msgs, stream: true },
-      signal: S.abort.signal
-    });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({ error: "HTTP " + res.status }));
-      if (errJson.code === "KEY_REQUIRED") {
-        S.user.licenseActive = false;
-        showKeyGate(true, errJson.error);
-      }
-      throw new Error(errJson.error || `HTTP ${res.status}`);
-    }
-
-    aiMsg.slot = res.headers.get("X-Key-Slot") || "";
-    const usedMod = res.headers.get("X-Used-Model");
-    if (usedMod) aiMsg.modelLabel += ` · ${usedMod}`;
-
-    const ct = res.headers.get("content-type") || "";
-    if (ct.includes("text/event-stream") && res.body) {
-      const reader = res.body.getReader();
-      const dec = new TextDecoder("utf-8");
-      let buf = "", rafPending = false;
-      const paint = () => {
-        rafPending = false;
-        const el = document.getElementById("md-" + aiMsg.id);
-        if (el) {
-          const ld = el.previousElementSibling;
-          if (ld?.classList.contains("wavy-box")) ld.remove();
-          el.innerHTML = renderMd(aiMsg.text);
-          if (isNearBottom()) scrollToBottom(false);
-        }
-      };
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() || "";
-        for (const l of lines) {
-          const t = l.trim();
-          if (!t.startsWith("data:")) continue;
-          const d = t.slice(5).trim();
-          if (d === "[DONE]") continue;
-          try {
-            const delta = JSON.parse(d).choices?.[0]?.delta?.content || "";
-            if (delta) { aiMsg.text += delta; if (!rafPending) { rafPending = true; requestAnimationFrame(paint); } }
-          } catch {}
-        }
-      }
-      paint();
-    } else {
-      const j = await res.json();
-      aiMsg.text = j.choices?.[0]?.message?.content || j.error?.message || "Không có phản hồi.";
-    }
-
-    if (S.activeTool === "canvas") {
-      const m = aiMsg.text.match(/```html\n([\s\S]*?)```/i);
-      if (m) openCanvasCode(m[1], chat.title);
-    }
-    if (S.liveMode && aiMsg.text) speakLiveReply(aiMsg.text);
-  } catch (e) {
-    aiMsg.text = e.name === "AbortError" ? (aiMsg.text + "\n\n*(Đã dừng)*") : `⚠️ **Thông báo:** ${e.message}`;
-  } finally {
-    aiMsg.streaming = false;
-    S.streaming = false;
-    S.abort = null;
-    chat.updatedAt = Date.now();
-    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
-    if (S.user) { S.user.dailyMsgs = (S.user.dailyMsgs || 0) + 1; syncAccountUI(); }
-    renderMessages();
-    renderMemoryBar();
-    updateOrbButton();
-  }
-}
-
-async function runGenImage(chat, prompt) {
-  const aiMsg = { id: "m-" + (Date.now() + 1), role: "assistant", text: "Đang tạo hình ảnh...", modelLabel: "Tạo ảnh", streaming: true, ts: Date.now() };
-  chat.messages.push(aiMsg); renderMessages();
-  S.streaming = true; updateOrbButton();
-  try {
-    const res = await apiFetch("/ai/image", { method: "POST", body: { prompt, size: "1024x1024" } });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    const it = data.data?.[0];
-    const src = it?.b64_json ? `data:image/png;base64,${it.b64_json}` : it?.url;
-    if (!src) throw new Error("Không nhận được dữ liệu ảnh.");
-    aiMsg.text = `Đã tạo xong hình ảnh: **${prompt}**`;
-    aiMsg.genImg = src;
-    await saveLib("media", prompt.slice(0, 32), src);
-    haptic("ok"); showToast("Đã lưu ảnh vào Thư viện");
-  } catch (e) { aiMsg.text = `⚠️ **Không thể tạo ảnh:** ${e.message}`; }
-  finally {
-    aiMsg.streaming = false; S.streaming = false; S.activeTool = null;
-    renderChips(); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
-    renderMessages(); updateOrbButton();
-  }
-}
-
-/* ===== MARKDOWN WITH COLLAPSIBLE CODE BLOCKS (7A) ===== */
-let cbSeq = 0;
-function renderMd(md) {
-  const blocks = [];
-  let s = String(md || "").replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    const i = blocks.length; blocks.push({ lang: lang || "text", code }); return `@@CB_${i}@@`;
-  });
-  s = esc(s)
-    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.*)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.*)$/gm, "<h1>$1</h1>")
-    .replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, '<code class="ic">$1</code>')
-    .replace(/^\s*[-*] (.*)$/gm, "<li>$1</li>")
-    .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
-    .replace(/<\/ul>\s*<ul>/g, "")
-    .replace(/\n{2,}/g, "</p><p>");
-  s = `<p>${s.replace(/\n/g, "<br>")}</p>`;
-
-  blocks.forEach((b, i) => {
-    const enc = encodeURIComponent(b.code);
-    const cid = "cb-" + (++cbSeq);
-    const canPrev = ["html", "svg"].includes(b.lang.toLowerCase());
-    s = s.replace(`@@CB_${i}@@`, `
-      <div class="code-box">
-        <div class="code-top">
-          <button class="tap" style="display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-size:13px;" onclick="toggleAcc('${cid}','ch-${cid}')">
-            <span id="ch-${cid}" class="chev rot"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-            <span>${esc(b.lang)}</span>
-          </button>
-          <div class="code-btns">
-            ${canPrev ? `<button class="code-icon-btn tap" onclick="openCanvasCode(decodeURIComponent('${enc}'),'Canvas')" title="Xem trước"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : ""}
-            <button class="code-icon-btn tap" onclick="copyCodeBtn(this,decodeURIComponent('${enc}'))" title="Sao chép">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-          </div>
-        </div>
-        <div id="${cid}" class="acc-wrap open"><div class="acc-inner"><pre><code>${esc(b.code)}</code></pre></div></div>
-      </div>`);
-  });
-  return s;
-}
-
-function copyCodeBtn(btn, txt) {
-  haptic("ok");
-  copyText(txt, "Đã sao chép");
-  const orig = btn.innerHTML;
-  btn.classList.add("copied");
-  btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`;
-  setTimeout(() => { btn.classList.remove("copied"); btn.innerHTML = orig; }, 1300);
-}
-
-/* ===== RENDER CHAT MESSAGES ===== */
-function renderMessages() {
-  const hero = document.getElementById("empty-hero");
-  const list = document.getElementById("messages");
-  const chat = S.chats.find(c => c.id === S.activeChatId);
-  if (!chat || !chat.messages.length) { hero.style.display = "flex"; list.innerHTML = ""; return; }
-  hero.style.display = "none";
-
-  list.innerHTML = chat.messages.map(m => {
-    if (m.role === "user") {
-      const thumbs = (m.atts || []).filter(a => a.dataUrl).map(a =>
-        `<img class="user-thumb-img" src="${a.dataUrl}" onclick="openLightbox('${a.dataUrl}')" />`
-      ).join("");
-      const docs = (m.atts || []).filter(a => a.type === "file").map(a =>
-        `<span class="cite-pill">📄 ${esc(a.name)}</span>`
-      ).join("");
-      return `<div class="msg-row user">
-        ${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}
-        ${docs ? `<div class="user-thumbs">${docs}</div>` : ""}
-        ${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}
-      </div>`;
-    }
-    const wavy = m.streaming && !m.text ? `<div class="wavy-box"><svg class="wavy-svg" viewBox="0 0 104 16"><path class="wavy-path" d="M0 8 Q6.5 1 13 8 T26 8 T39 8 T52 8 T65 8 T78 8 T91 8 T104 8"/></svg><span>Đang suy luận...</span></div>` : "";
-    const spk = S.speakingMsgId === m.id ? "speaking" : "";
-    return `<div class="msg-row assistant">
-      <div class="ai-block">
-        <div class="ai-meta-line">
-          <span class="meta-pill">${esc(m.modelLabel || "Chat GPT")}</span>
-          ${m.slot ? `<span class="meta-pill">${esc(m.slot)}</span>` : ""}
-        </div>
-        ${wavy}
-        <div class="md" id="md-${m.id}">${m.text ? renderMd(m.text) : ""}</div>
-        ${m.citedFile ? `<span class="cite-pill">${esc(m.citedFile)}</span>` : ""}
-        ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}')" />` : ""}
-        ${!m.streaming ? `
-        <div class="ai-actions">
-          <div class="ai-act-left">
-            <button class="act-icon tap ${m.feedback==="up"?"active-like":""}" onclick="rateMsg('${m.id}','up')"><svg fill="${m.feedback==="up"?"currentColor":"none"}" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>
-            <button class="act-icon tap ${m.feedback==="down"?"active-dislike":""}" onclick="rateMsg('${m.id}','down')"><svg fill="${m.feedback==="down"?"currentColor":"none"}" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button>
-            <button class="act-icon tap" onclick="shareMsg('${m.id}')"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4m0-11-6.8 4"/></svg></button>
-            <button class="act-icon tap" onclick="copyCodeBtn(this,getMsgText('${m.id}'))"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-            <button class="act-icon tap" onclick="openMsgMore('${m.id}')"><svg fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="19" cy="12" r="1.1"/></svg></button>
-          </div>
-          <button class="act-icon tap ${spk}" onclick="toggleSpeak('${m.id}')"><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></button>
-        </div>` : ""}
-      </div>
-    </div>`;
-  }).join("");
-}
-
-function getMsgText(id) { return S.chats.find(c => c.id === S.activeChatId)?.messages.find(m => m.id === id)?.text || ""; }
-function rateMsg(id, d) { haptic("tap"); const c = S.chats.find(x => x.id === S.activeChatId); const m = c?.messages.find(x => x.id === id); if (!m) return; m.feedback = m.feedback === d ? null : d; renderMessages(); }
-function shareMsg(id) { const t = getMsgText(id); if (navigator.share) navigator.share({ title: "Chat GPT", text: t }).catch(()=>{}); else copyText(t, "Đã sao chép"); }
-function openMsgMore(id) {
-  openModal(`<h3 style="margin-bottom:10px;">Tùy chọn</h3>
-    <button class="s-row tap-soft" onclick="closeModal();openCanvasCode(getMsgText('${id}'),'Canvas')"><span>🧩 Mở trong Canvas</span></button>
-    <button class="s-row tap-soft" onclick="closeModal();saveLib('doc','Ghi chú Chat GPT',getMsgText('${id}'));showToast('Đã lưu Thư viện')"><span>📚 Lưu vào Thư viện</span></button>
-    <button class="s-row tap-soft" onclick="closeModal();addQuickMemory(getMsgText('${id}').slice(0,220))"><span>🧠 Lưu đoạn này vào Trí nhớ</span></button>`);
-}
-function toggleSpeak(id) {
-  if (!window.speechSynthesis) return showToast("Không hỗ trợ đọc giọng nói");
-  if (S.speakingMsgId === id) { speechSynthesis.cancel(); S.speakingMsgId = null; renderMessages(); return; }
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(getMsgText(id).replace(/[#*`]/g, "")); u.lang = "vi-VN";
-  u.onend = () => { S.speakingMsgId = null; renderMessages(); };
-  S.speakingMsgId = id; renderMessages(); speechSynthesis.speak(u);
-}
-
-/* =========================================================================
-   ADMIN DASHBOARD (KEYS + USERS + FORGOT PASSWORD INBOX + API/MODELS + PLAN LIMITS)
-   ========================================================================= */
-async function openAdminPanel() {
-  switchView("admin");
-  await loadAdminData();
-}
-
-async function loadAdminData(silent = false) {
-  try {
-    const r = await apiFetch("/admin/overview");
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Không tải được Admin");
-    S.adminData = data;
-    const pendingCnt = (data.resetRequests || []).filter(x => x.status === "pending").length;
-    const pill = document.getElementById("admin-pending-pill");
-    const dot = document.getElementById("menu-badge-dot");
-    pill.style.display = pendingCnt ? "inline-block" : "none";
-    pill.textContent = String(pendingCnt);
-    dot.classList.toggle("show", pendingCnt > 0);
-    dot.textContent = String(pendingCnt);
-    const tCnt = document.getElementById("tab-rst-count");
-    if (tCnt) tCnt.textContent = pendingCnt ? `(${pendingCnt})` : "";
-    if (!silent) renderAdminBody();
-  } catch (e) { if (!silent) showToast(e.message); }
-}
-
-function setAdminTab(t) {
-  haptic("tap");
-  S.adminTab = t;
-  document.querySelectorAll("[data-adtab]").forEach(b => b.classList.toggle("active", b.dataset.adtab === t));
-  renderAdminBody();
-}
-
-function renderAdminBody() {
-  const d = S.adminData;
-  const box = document.getElementById("admin-body");
-  if (!d) { box.innerHTML = `<p class="p-sub">Đang tải dữ liệu quản trị...</p>`; return; }
-
-  // TAB 1: KEYS
-  if (S.adminTab === "keys") {
-    box.innerHTML = `
-      <div class="card-item lg-card">
-        <strong style="display:block;margin-bottom:8px;">Tạo Key bản quyền mới (1 Key = đúng 1 Email)</strong>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div>
-            <label class="f-lbl">Thời hạn gói</label>
-            <select id="ak-plan" class="field">${PLAN_OPTIONS.map(([v,l]) => `<option value="${v}">${l}</option>`).join("")}</select>
-          </div>
-          <div>
-            <label class="f-lbl">Số lượng tạo</label>
-            <input id="ak-cnt" type="number" min="1" max="50" value="1" class="field" />
-          </div>
-          <div>
-            <label class="f-lbl">Tối đa thiết bị/Key</label>
-            <input id="ak-dev" type="number" min="1" max="10" value="2" class="field" />
-          </div>
-          <div>
-            <label class="f-lbl">Tiền tố Key</label>
-            <input id="ak-pre" class="field" value="BANG" />
-          </div>
-        </div>
-        <label class="f-lbl">Ghi chú (tùy chọn)</label>
-        <input id="ak-note" class="field" placeholder="VD: Khách A / Đợt mở bán tháng 11" />
-        <button class="btn-p tap" style="width:100%;margin-top:12px;" onclick="adminCreateKeys()">+ Tạo Key ngay</button>
-      </div>
-      <div style="font-size:13px;color:var(--ink-2);margin:10px 0 8px;">Danh sách Key (${d.keys.length})</div>
-      ${d.keys.map(k => `
-        <div class="card-item lg-card">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-            <strong style="font-family:ui-monospace,monospace;font-size:14px;">${esc(k.key_code)}</strong>
-            <span class="tag-st st-${k.status}">${k.status}</span>
-          </div>
-          <div style="font-size:12.5px;color:var(--ink-2);margin-top:5px;">
-            Gói: <b>${esc(d.planLabels?.[k.plan_type] || k.plan_type)}</b> · Max máy: <b>${k.max_devices}</b><br/>
-            Email đang gắn: <b style="color:#dbeafe;">${esc(k.bound_email || "Chưa kích hoạt")}</b><br/>
-            ${k.expires_at ? `Hết hạn: ${new Date(k.expires_at).toLocaleString("vi-VN")}` : `Thời hạn: ${k.duration_days} ngày kể từ lúc nhập`}
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-            <button class="btn-s tap" onclick="copyText('${esc(k.key_code)}','Đã copy Key')">Copy</button>
-            <button class="btn-s tap" onclick="adminKeyAct('${esc(k.key_code)}','extend')">+30 ngày</button>
-            <button class="btn-s tap" onclick="adminKeyAct('${esc(k.key_code)}','reset_devices')">Reset máy</button>
-            <button class="btn-danger tap" onclick="adminKeyAct('${esc(k.key_code)}','${k.status==="revoked"?"unrevoke":"revoke"}')">${k.status==="revoked"?"Mở lại":"Thu hồi nóng"}</button>
-            <button class="btn-danger tap" onclick="adminKeyAct('${esc(k.key_code)}','delete')">Xóa</button>
-          </div>
-        </div>`).join("")}`;
-    return;
-  }
-
-  // TAB 2: USERS / EMAILS
-  if (S.adminTab === "users") {
-    box.innerHTML = `<div style="font-size:13px;color:var(--ink-2);margin-bottom:8px;">Tổng số tài khoản: ${d.users.length}</div>` + d.users.map(u => `
-      <div class="card-item lg-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-          <strong>${esc(u.email)}</strong>
-          <span class="tag-st ${u.banned ? "st-revoked" : "st-active"}">${u.role === "admin" ? "ADMIN" : (u.banned ? "BỊ KHÓA" : (u.plan_type || "Chưa có Key"))}</span>
-        </div>
-        <div style="font-size:12.5px;color:var(--ink-2);margin-top:5px;">
-          Key đang chạy: <code style="color:#bfdbfe;">${esc(u.active_key || "Không có")}</code><br/>
-          Hết hạn: ${u.key_expires_at ? new Date(u.key_expires_at).toLocaleString("vi-VN") : "—"} · Thiết bị đã gắn: <b>${u.deviceCount}</b><br/>
-          Hôm nay: <b>${u.daily_msg_count}</b> tin · <b>${Math.round((u.daily_token_count||0)/1000)}K</b> token
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-          <button class="btn-blue tap" onclick="adminPromptChangePass('${esc(u.email)}')">Đổi mật khẩu</button>
-          <button class="btn-s tap" onclick="adminUserAct('${esc(u.email)}','reset_devices')">Reset thiết bị</button>
-          ${u.role !== "admin" ? `
-            <button class="btn-s tap" onclick="adminUserAct('${esc(u.email)}','clear_key')">Gỡ Key</button>
-            <button class="btn-danger tap" onclick="adminUserAct('${esc(u.email)}','${u.banned?"unban":"ban"}')">${u.banned?"Mở khóa":"Khóa TK"}</button>
-          ` : ""}
-        </div>
-      </div>`).join("");
-    return;
-  }
-
-  // TAB 3: FORGOT PASSWORD INBOX (ĐỘT PHÁ 3 CHỈNH SỬA — ADMIN TỰ GỬI EMAIL BẰNG TAY)
-  if (S.adminTab === "resets") {
-    box.innerHTML = `<p class="p-sub">Khi khách nhập đúng <b>Email + Key</b> ở mục Quên mật khẩu, phiếu sẽ hiện ở đây. Bấm <b>Cấp mật khẩu mới</b> để đổi pass ngay trên hệ thống, sau đó copy hoặc bấm Mở Mail để tự tay gửi cho khách.</p>` +
-    ((d.resetRequests || []).length ? d.resetRequests.map(r => `
-      <div class="card-item lg-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <strong>${esc(r.email)}</strong>
-          <span class="tag-st ${r.status==="pending"?"st-pending":"st-active"}">${r.status==="pending"?"Chờ cấp MK":"Đã cấp MK"}</span>
-        </div>
-        <div style="font-size:12.5px;color:var(--ink-2);margin-top:5px;">
-          Key đã xác thực: <code style="color:#bfdbfe;">${esc(r.key_code)}</code><br/>
-          Thời gian gửi: ${new Date(r.created_at).toLocaleString("vi-VN")}
-          ${r.new_temp_password ? `<br/>Mật khẩu mới đã cấp: <b style="color:var(--green);">${esc(r.new_temp_password)}</b>` : ""}
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-          ${r.status === "pending"
-            ? `<button class="btn-p tap" onclick="adminResolveReset('${r.id}','${esc(r.email)}')">🔑 Cấp mật khẩu mới</button>`
-            : `<button class="btn-s tap" onclick="openManualMailHandoff('${esc(r.email)}','${esc(r.new_temp_password||"")}')">✉ Mở lại mẫu gửi mail</button>`}
-        </div>
-      </div>`).join("") : `<div class="card-item lg-card" style="color:var(--ink-3);">Chưa có yêu cầu quên mật khẩu nào.</div>`);
-    return;
-  }
-
-  // TAB 4: API & DYNAMIC MODELS
-  if (S.adminTab === "api") {
-    const c = d.config;
-    box.innerHTML = `
-      <div class="card-item lg-card">
-        <strong>Cấu hình Upstream API & Key Pool (Ẩn 100% khỏi APK)</strong>
-        <label class="f-lbl">API Base URL</label>
-        <input id="ad-base" class="field" value="${esc(c.api_base)}" />
-        <label class="f-lbl">Danh sách API Keys (mỗi dòng 1 key · tự chia tải + failover)</label>
-        <textarea id="ad-keys" class="field" rows="4">${esc((c.api_keys || []).join("\n"))}</textarea>
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-          <button class="btn-p tap" onclick="adminSaveApi()">Lưu API & Key Pool</button>
-          <button class="btn-s tap" onclick="adminCheckUsage()">📊 Kiểm tra số dư /usage</button>
-        </div>
-        <div id="ad-usage-out" style="margin-top:10px;"></div>
-      </div>
-
-      <div class="card-item lg-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <strong>Danh sách Model hiển thị trong App (${c.models.length})</strong>
-          <button class="btn-blue tap" onclick="adminAddModelModal()">+ Thêm Model</button>
-        </div>
-        ${c.models.map((m, i) => `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
-            <div>
-              <strong>${esc(m.title)}</strong> <span class="pill-sub">${esc(m.tier)}</span>
-              <div style="font-size:12px;color:var(--ink-2);">${esc(m.short)} → <code>${esc(m.mapped)}</code></div>
-            </div>
-            <button class="btn-danger tap" onclick="adminDeleteModel(${i})">Xóa</button>
-          </div>`).join("")}
-      </div>`;
-    return;
-  }
-
-  // TAB 5: PLAN LIMITS (3C)
-  if (S.adminTab === "limits") {
-    const p = S.selectedLimitPlan || "week";
-    const lim = d.config.plan_limits[p] || d.config.plan_limits.week;
-    box.innerHTML = `
-      <div class="card-item lg-card">
-        <label class="f-lbl">Chọn gói Key muốn tùy chỉnh giới hạn</label>
-        <select class="field" onchange="S.selectedLimitPlan=this.value;renderAdminBody()">
-          ${PLAN_OPTIONS.map(([v,l]) => `<option value="${v}" ${v===p?"selected":""}>${l}</option>`).join("")}
-        </select>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-          <div><label class="f-lbl">Tin nhắn tối đa / ngày</label><input id="lm-msgs" type="number" class="field" value="${lim.daily_msgs}" /></div>
-          <div><label class="f-lbl">Ngân sách Token / ngày</label><input id="lm-toks" type="number" class="field" value="${lim.daily_tokens}" /></div>
-        </div>
-        <label class="f-lbl">Số thiết bị tối đa</label>
-        <input id="lm-devs" type="number" class="field" value="${lim.max_devices || 2}" />
-
-        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Dùng Model Pro (Neon/Carbon/Model thêm)</span><div id="lm-pro" class="sw ${lim.allow_pro_models?"on":""}"></div></div>
-        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Cho phép gửi Ảnh HD 2048px</span><div id="lm-hd" class="sw ${lim.allow_hd_vision?"on":""}"></div></div>
-        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Cho phép Tạo hình ảnh</span><div id="lm-img" class="sw ${lim.allow_image_gen?"on":""}"></div></div>
-        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Cho phép Deep Research</span><div id="lm-dr" class="sw ${lim.allow_deep_research?"on":""}"></div></div>
-        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Cho phép Canvas</span><div id="lm-cv" class="sw ${lim.allow_canvas?"on":""}"></div></div>
-        <button class="btn-p tap" style="width:100%;margin-top:12px;" onclick="adminSaveLimit('${p}')">Lưu giới hạn gói này</button>
-      </div>`;
-  }
-}
-
-async function adminCreateKeys() {
-  haptic("tap");
-  const body = {
-    planType: document.getElementById("ak-plan").value,
-    count: document.getElementById("ak-cnt").value,
-    maxDevices: document.getElementById("ak-dev").value,
-    prefix: document.getElementById("ak-pre").value,
-    note: document.getElementById("ak-note").value
-  };
-  const r = await apiFetch("/admin/keys/create", { method: "POST", body });
-  const data = await r.json();
-  if (!r.ok) return showToast(data.error || "Lỗi tạo key");
-  haptic("ok");
-  const txt = data.created.join("\n");
-  window.__lastCreatedKeys = txt;
-  openModal(`
-    <h3 style="margin-bottom:8px;">Đã tạo ${data.created.length} Key mới</h3>
-    <textarea class="field" rows="6" readonly style="font-family:ui-monospace,monospace;">${esc(txt)}</textarea>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-      <button class="btn-p tap" onclick="copyText(window.__lastCreatedKeys,'Đã copy toàn bộ Key');closeModal()">Sao chép tất cả</button>
-    </div>`);
-  loadAdminData();
-}
-
-async function adminKeyAct(keyCode, action) {
-  haptic("tap");
-  const r = await apiFetch("/admin/keys/action", { method: "POST", body: { keyCode, action, extraDays: 30 } });
-  if (r.ok) { haptic("ok"); showToast("Đã cập nhật Key"); loadAdminData(); }
-}
-
-function adminPromptChangePass(email) {
-  openModal(`
-    <h3 style="margin-bottom:6px;">Đổi mật khẩu tài khoản</h3>
-    <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px;">Email: <b>${esc(email)}</b></p>
-    <input id="ad-new-pass" class="field" placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)" value="CGPT@${Math.floor(100000+Math.random()*899999)}" />
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-      <button class="btn-s tap" onclick="closeModal()">Hủy</button>
-      <button class="btn-p tap" onclick="adminCommitPass('${esc(email)}')">Cập nhật mật khẩu</button>
-    </div>`);
-}
-
-async function adminCommitPass(email) {
-  const newPassword = document.getElementById("ad-new-pass").value.trim();
-  const r = await apiFetch("/admin/users/password", { method: "POST", body: { email, newPassword } });
-  const data = await r.json();
-  if (!r.ok) return showToast(data.error || "Lỗi");
-  haptic("ok");
-  openManualMailHandoff(email, data.newPassword);
-}
-
-async function adminUserAct(email, action) {
-  haptic("tap");
-  const r = await apiFetch("/admin/users/action", { method: "POST", body: { email, action } });
-  const d = await r.json();
-  if (!r.ok) return showToast(d.error || "Lỗi");
-  haptic("ok"); showToast("Đã cập nhật tài khoản"); loadAdminData();
-}
-
-async function adminResolveReset(requestId, email) {
-  haptic("tap");
-  const r = await apiFetch("/admin/resets/resolve", { method: "POST", body: { requestId } });
-  const data = await r.json();
-  if (!r.ok) return showToast(data.error || "Lỗi cấp mật khẩu");
-  haptic("ok");
-  loadAdminData();
-  openManualMailHandoff(data.email || email, data.newPassword);
-}
-
-function openManualMailHandoff(email, newPassword) {
-  const mailText = `Xin chào,\n\nMật khẩu mới cho tài khoản Chat GPT (${email}) của bạn là:\n${newPassword}\n\nBạn hãy mở ứng dụng Chat GPT và đăng nhập bằng mật khẩu mới này nhé.`;
-  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent("Mật khẩu mới tài khoản Chat GPT")}&body=${encodeURIComponent(mailText)}`;
-  window.__lastMailText = mailText;
-  openModal(`
-    <h3 style="margin-bottom:6px;">✅ Đã cấp mật khẩu mới trên hệ thống</h3>
-    <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px;">Tài khoản <b>${esc(email)}</b> đã được đổi sang mật khẩu dưới đây. Bạn sao chép hoặc bấm Mở Mail để tự tay gửi cho khách:</p>
-    <div class="lg-card" style="padding:12px;border-radius:14px;text-align:center;font-family:ui-monospace,monospace;font-size:18px;font-weight:700;color:var(--green);margin-bottom:12px;">${esc(newPassword)}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn-s tap" style="flex:1;" onclick="copyText(window.__lastMailText,'Đã copy mẫu tin nhắn')">Sao chép mẫu gửi</button>
-      <a class="btn-p tap" style="flex:1;text-align:center;text-decoration:none;" href="${mailto}">✉ Mở ứng dụng Mail</a>
-    </div>
-    <button class="btn-s tap" style="width:100%;margin-top:8px;" onclick="closeModal()">Đóng</button>
-  `);
-}
-
-async function adminSaveApi() {
-  const api_base = document.getElementById("ad-base").value.trim();
-  const api_keys = document.getElementById("ad-keys").value.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
-  const r = await apiFetch("/admin/config/save", { method: "POST", body: { api_base, api_keys } });
-  if (r.ok) { haptic("ok"); showToast("Đã lưu API Base & Key Pool"); loadAdminData(); }
-}
-
-async function adminCheckUsage() {
-  const out = document.getElementById("ad-usage-out");
-  out.innerHTML = `<span style="font-size:12.5px;color:var(--ink-2);">Đang kiểm tra tất cả API Key...</span>`;
-  const r = await apiFetch("/admin/usage");
-  const d = await r.json();
-  out.innerHTML = (d.keys || []).map(k => `<div style="padding:8px;margin-top:6px;border-radius:12px;background:rgba(255,255,255,0.05);font-size:12px;"><b>Key #${k.slot}</b> (${esc(k.masked)})<pre style="white-space:pre-wrap;color:#bfdbfe;margin-top:4px;">${esc(JSON.stringify(k.data || k.error))}</pre></div>`).join("");
-}
-
-function adminAddModelModal() {
-  openModal(`
-    <h3 style="margin-bottom:8px;">Thêm Model AI mới</h3>
-    <label class="f-lbl">ID (không dấu, không cách)</label><input id="nm-id" class="field" placeholder="vd: claude-sonnet" />
-    <label class="f-lbl">Tên hiển thị</label><input id="nm-title" class="field" placeholder="vd: Claude Sonnet 5" />
-    <label class="f-lbl">Tên ngắn trên Header</label><input id="nm-short" class="field" placeholder="vd: Sonnet 5" />
-    <label class="f-lbl">Model ID thực gửi API</label><input id="nm-map" class="field" placeholder="vd: claude-sonnet-5" />
-    <label class="f-lbl">Mô tả phụ</label><input id="nm-sub" class="field" placeholder="vd: Viết lách & lập trình sâu" />
-    <label class="f-lbl">Bậc gói</label>
-    <select id="nm-tier" class="field"><option value="pro">Pro (Gói Tháng/Năm)</option><option value="basic">Basic (Mọi gói kể cả Tuần)</option></select>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-      <button class="btn-s tap" onclick="closeModal()">Hủy</button>
-      <button class="btn-p tap" onclick="adminCommitNewModel()">Thêm Model</button>
-    </div>`);
-}
-
-async function adminCommitNewModel() {
-  const m = {
-    id: document.getElementById("nm-id").value.trim(),
-    title: document.getElementById("nm-title").value.trim(),
-    short: document.getElementById("nm-short").value.trim() || document.getElementById("nm-title").value.trim(),
-    mapped: document.getElementById("nm-map").value.trim(),
-    sub: document.getElementById("nm-sub").value.trim(),
-    tier: document.getElementById("nm-tier").value,
-    badge: "Mới"
-  };
-  if (!m.id || !m.title || !m.mapped) return showToast("Nhập đủ ID, Tên và Model API");
-  const models = [...(S.adminData.config.models || []), m];
-  const r = await apiFetch("/admin/config/save", { method: "POST", body: { models } });
-  if (r.ok) { S.models = models; renderModelDropdown(); closeModal(); haptic("ok"); showToast("Đã thêm Model mới"); loadAdminData(); }
-}
-
-async function adminDeleteModel(idx) {
-  const models = S.adminData.config.models.filter((_, i) => i !== idx);
-  if (!models.length) return showToast("Cần giữ ít nhất 1 model");
-  const r = await apiFetch("/admin/config/save", { method: "POST", body: { models } });
-  if (r.ok) { S.models = models; renderModelDropdown(); haptic("ok"); loadAdminData(); }
-}
-
-async function adminSaveLimit(plan) {
-  const plan_limits = {
-    [plan]: {
-      daily_msgs: parseInt(document.getElementById("lm-msgs").value || 20, 10),
-      daily_tokens: parseInt(document.getElementById("lm-toks").value || 25000, 10),
-      max_devices: parseInt(document.getElementById("lm-devs").value || 2, 10),
-      allow_pro_models: document.getElementById("lm-pro").classList.contains("on"),
-      allow_hd_vision: document.getElementById("lm-hd").classList.contains("on"),
-      allow_image_gen: document.getElementById("lm-img").classList.contains("on"),
-      allow_deep_research: document.getElementById("lm-dr").classList.contains("on"),
-      allow_canvas: document.getElementById("lm-cv").classList.contains("on")
-    }
-  };
-  const r = await apiFetch("/admin/config/save", { method: "POST", body: { plan_limits } });
-  if (r.ok) { haptic("ok"); showToast("Đã lưu giới hạn gói"); loadAdminData(); }
-}
-
-/* ===== IN-APP UPDATER (GITHUB RELEASES — ĐỘT PHÁ 2A) ===== */
-async function checkAppUpdate(silent = false) {
-  try {
-    const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
-    if (!r.ok) { if (!silent) showToast("Chưa có bản phát hành trên GitHub Releases"); return; }
-    const rel = await r.json();
-    const tag = (rel.tag_name || "").replace(/^v/i, "");
-    const apkAsset = (rel.assets || []).find(a => a.name.endsWith(".apk"));
-    if (tag && tag !== APP_VERSION_NAME && apkAsset) {
-      openModal(`
-        <h3 style="margin-bottom:6px;">🚀 Có bản cập nhật mới v${esc(tag)}</h3>
-        <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px;">Phiên bản hiện tại: v${esc(APP_VERSION_NAME)}. Tải file APK bên dưới và bấm <b>Cập nhật</b> — không cần xóa bản cũ, giữ nguyên đăng nhập.</p>
-        <div class="lg-card" style="padding:10px 12px;border-radius:14px;font-size:12.5px;color:var(--ink-2);margin-bottom:14px;white-space:pre-wrap;">${esc((rel.body || "Nâng cấp hiệu năng và tính năng mới.").slice(0, 300))}</div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn-s tap" style="flex:1;" onclick="closeModal()">Để sau</button>
-          <a class="btn-p tap" style="flex:1;text-align:center;text-decoration:none;" href="${apkAsset.browser_download_url}" target="_blank">⬇ Tải & Cập nhật</a>
-        </div>`);
-    } else if (!silent) {
-      showToast(`Bạn đang dùng bản mới nhất (v${APP_VERSION_NAME})`);
-    }
-  } catch { if (!silent) showToast("Không kiểm tra được cập nhật lúc này"); }
-}
-
-/* ===== REMAINING UI: VOICE, SIDEBAR, SKILLS, LIBRARY, MEMORY, APPEARANCE, CANVAS ===== */
-function setWorkMode(mode, anim = true) {
-  S.cfg.workMode = mode; dbPut("kv", S.cfg);
-  const tr = document.getElementById("mode-seg"), th = document.getElementById("mode-thumb");
-  tr.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
-  const act = tr.querySelector(`.seg-btn[data-mode="${mode}"]`);
-  if (act && th) { th.style.width = act.offsetWidth + "px"; th.style.transform = `translate3d(${act.offsetLeft - 3}px, 0, 0)`; }
-  const h = document.getElementById("hero-title");
-  if (anim) { h.style.opacity = "0"; setTimeout(() => { h.textContent = mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : "Chúng ta nên bắt đầu từ đâu nhỉ?"; h.style.opacity = "1"; }, 130); }
-  else h.textContent = mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : "Chúng ta nên bắt đầu từ đâu nhỉ?";
-  document.getElementById("prompt-in").placeholder = mode === "task" ? "Mô tả tác vụ..." : "Hỏi Chat GPT";
-}
-
-function handleOrbAction() {
-  const has = document.getElementById("prompt-in").value.trim().length > 0 || S.atts.length > 0;
-  if (S.streaming || has) return sendPrompt();
-  openLiveVoice();
-}
-function openLiveVoice() { haptic("tap"); S.liveMode = true; document.getElementById("live-voice-ov").classList.add("open"); restartLiveListen(); }
-function restartLiveListen() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const st = document.getElementById("live-status"), tr = document.getElementById("live-transcript"), bars = document.getElementById("live-bars");
-  if (!SR) { st.textContent = "Thiết bị chưa bật nhận diện giọng nói"; bars.classList.add("paused"); return; }
-  speechSynthesis?.cancel(); bars.classList.remove("paused"); st.textContent = "Đang lắng nghe..."; tr.textContent = "";
-  const r = new SR(); r.lang = "vi-VN"; r.interimResults = true; let fin = "";
-  r.onresult = e => { fin = Array.from(e.results).map(x => x[0].transcript).join(""); tr.textContent = fin; };
-  r.onend = () => { if (!S.liveMode) return; if (fin.trim()) { st.textContent = "Chat GPT đang trả lời..."; sendPrompt(fin.trim()); } else { bars.classList.add("paused"); st.textContent = "Bấm Nói lại để tiếp tục"; } };
-  S.rec = r; r.start();
-}
-function speakLiveReply(t) { if (!window.speechSynthesis || !S.liveMode) return; const u = new SpeechSynthesisUtterance(t.replace(/[#*`]/g, "").slice(0, 600)); u.lang = "vi-VN"; u.onend = () => { if (S.liveMode) restartLiveListen(); }; speechSynthesis.speak(u); }
-function closeLiveVoice() { S.liveMode = false; S.rec?.stop(); speechSynthesis?.cancel(); document.getElementById("live-voice-ov").classList.remove("open"); }
-
-function toggleVoiceDictate() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return showToast("Thiết bị không hỗ trợ ghi âm");
-  const btn = document.getElementById("btn-mic");
-  if (S.recording) { S.rec?.stop(); S.recording = false; btn.classList.remove("rec"); return; }
-  const r = new SR(); r.lang = "vi-VN"; r.interimResults = true;
-  r.onresult = e => { document.getElementById("prompt-in").value = Array.from(e.results).map(x => x[0].transcript).join(""); autoGrow(); updateOrbButton(); };
-  r.onend = () => { S.recording = false; btn.classList.remove("rec"); };
-  S.rec = r; S.recording = true; btn.classList.add("rec"); r.start();
-}
-
-function toggleSidebar(o) { haptic("tap"); document.getElementById("sidebar").classList.toggle("open", o); document.getElementById("scrim").classList.toggle("open", o); if (!o) closePopovers(); }
-function closePopovers() { document.querySelectorAll(".popover").forEach(p => p.classList.remove("open")); document.getElementById("btn-model-trigger").classList.remove("open"); }
-function toggleModelDropdown(e) { e.stopPropagation(); haptic("tap"); const d = document.getElementById("model-dropdown"), b = document.getElementById("btn-model-trigger"); const o = !d.classList.contains("open"); closePopovers(); d.classList.toggle("open", o); b.classList.toggle("open", o); }
-function toggleChatMore(e) { e.stopPropagation(); haptic("tap"); const p = document.getElementById("chat-more-popover"); const o = !p.classList.contains("open"); closePopovers(); p.classList.toggle("open", o); }
-
-function switchView(v) {
-  haptic("tap");
-  document.querySelectorAll(".view").forEach(x => x.classList.remove("active"));
-  document.getElementById("view-" + v)?.classList.add("active");
-  toggleSidebar(false);
-  if (v === "customize") renderSkillsPage();
-  if (v === "library") renderLibrary();
-  if (v === "import") renderMemoriesPage();
-}
-
-function renderSidebar() { renderNbList(); renderChatsList(); }
-function cycleFilter() { const arr = ["all","pinned","task"], lb = { all:"Lịch sử chat", pinned:"Đã ghim", task:"Nhiệm vụ" }; S.filter = arr[(arr.indexOf(S.filter)+1)%arr.length]; document.getElementById("filter-lbl").textContent = lb[S.filter]; renderChatsList(); }
-function renderChatsList() {
-  const q = (document.getElementById("sb-search")?.value || "").toLowerCase();
-  let items = [...S.chats];
-  if (S.filter === "pinned") items = items.filter(c => c.pinned);
-  if (S.filter === "task") items = items.filter(c => c.mode === "task");
-  if (q) items = items.filter(c => (c.title || "").toLowerCase().includes(q));
-  items.sort((a, b) => (Number(b.pinned) - Number(a.pinned)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
-  document.getElementById("sb-chats-list").innerHTML = items.map(c => `
-    <div class="chat-item ${c.id===S.activeChatId?"active":""}" onclick="openChat('${c.id}')">
-      <span class="chat-item-title">${esc(c.title)}</span>
-      <button class="mini-act tap ${c.pinned?"pinned":""}" onclick="event.stopPropagation();pinChat('${c.id}')">📌</button>
-      <button class="mini-act tap" onclick="event.stopPropagation();delChat('${c.id}')">✕</button>
-    </div>`).join("") || `<div style="padding:8px 10px;font-size:12.5px;color:var(--ink-3);">Chưa có đoạn chat</div>`;
-}
-
-function startNewChat() { S.activeChatId = null; S.activeNbId = null; S.lastCrossRecalls = []; switchView("chat"); renderMessages(); renderChatsList(); renderMemoryBar(); renderChips(); }
-function openChat(id) { S.activeChatId = id; S.activeNbId = S.chats.find(x => x.id === id)?.nbId || null; switchView("chat"); renderMessages(); renderChatsList(); renderMemoryBar(); renderChips(); }
-async function pinChat(id) { const c = S.chats.find(x => x.id === id); if (!c) return; c.pinned = !c.pinned; apiFetch("/sync/chats", { method: "POST", body: c }).catch(()=>{}); renderChatsList(); }
-async function delChat(id) { S.chats = S.chats.filter(x => x.id !== id); apiFetch("/sync/chats/" + encodeURIComponent(id), { method: "DELETE" }).catch(()=>{}); if (S.activeChatId === id) S.activeChatId = null; renderChatsList(); renderMessages(); }
-function pinActiveChat() { if (S.activeChatId) { pinChat(S.activeChatId); showToast("Đã cập nhật ghim"); } }
-function deleteActiveChat() { if (S.activeChatId) { delChat(S.activeChatId); showToast("Đã xóa cuộc trò chuyện"); } }
-
-function renderNbList() {
-  document.getElementById("sb-nb-list").innerHTML = S.notebooks.map(nb => `
-    <div class="chat-item ${S.activeNbId===nb.id?"active":""}" onclick="toggleNb('${nb.id}')">
-      <span class="chat-item-title">📒 ${esc(nb.title)}</span>
-      <button class="mini-act tap" onclick="event.stopPropagation();openNotebookModal('${nb.id}')">⋮</button>
-    </div>`).join("") || `<div style="padding:6px 10px;font-size:12px;color:var(--ink-3);">Chưa có sổ ghi chú</div>`;
-}
-function openNotebookModal(id = null) {
-  const nb = id ? S.notebooks.find(x => x.id === id) : null;
-  openModal(`<h3 style="margin-bottom:8px;">${nb?"Sửa Sổ ghi chú":"Sổ ghi chú mới"}</h3>
-    <label class="f-lbl">Tiêu đề</label><input id="nb-t" class="field" value="${esc(nb?.title||"")}" />
-    <label class="f-lbl">Ghi chú nguồn</label><textarea id="nb-c" class="field" rows="5">${esc(nb?.notes||"")}</textarea>
-    <div style="display:flex;justify-content:space-between;margin-top:12px;">
-      ${nb?`<button class="btn-danger tap" onclick="delNb('${nb.id}')">Xóa</button>`:`<span></span>`}
-      <div style="display:flex;gap:8px;"><button class="btn-s tap" onclick="closeModal()">Hủy</button><button class="btn-p tap" onclick="saveNb('${nb?.id||""}')">Lưu</button></div>
-    </div>`);
-}
-async function saveNb(id) {
-  const title = document.getElementById("nb-t").value.trim(), notes = document.getElementById("nb-c").value.trim();
-  if (!title) return;
-  const nb = { id: id || ("nb-" + Date.now()), title, notes };
-  await dbPut("notebooks", nb); S.notebooks = await dbAll("notebooks"); S.activeNbId = nb.id;
-  closeModal(); renderNbList(); renderChips(); haptic("ok"); showToast("Đã lưu sổ ghi chú");
-}
-async function delNb(id) { await dbDel("notebooks", id); S.notebooks = S.notebooks.filter(x => x.id !== id); if (S.activeNbId === id) S.activeNbId = null; closeModal(); renderNbList(); renderChips(); }
-function toggleNb(id) { S.activeNbId = S.activeNbId === id ? null : id; toggleSidebar(false); switchView("chat"); renderNbList(); renderChips(); }
-function pickNotebookModal() {
-  if (!S.notebooks.length) return openNotebookModal();
-  openModal(`<h3 style="margin-bottom:10px;">Gắn Sổ ghi chú</h3>` + S.notebooks.map(n => `<button class="s-row tap-soft" onclick="toggleNb('${n.id}');closeModal()"><span>📒 ${esc(n.title)}</span><span>${S.activeNbId===n.id?"✓":""}</span></button>`).join(""));
-}
-
-/* Skills Page */
-function renderSkillsPage() {
-  document.getElementById("customize-body").innerHTML = S.skills.map(sk => {
-    const on = S.skillIds.includes(sk.id);
-    return `<div class="card-item lg-card" style="display:flex;align-items:center;gap:10px;">
-      <div style="flex:1;min-width:0;cursor:pointer;" onclick="toggleSkillPill('${sk.id}');renderSkillsPage()">
-        <strong>@${esc(sk.name)}</strong> ${sk.builtin ? `<span class="tag-st st-unused">Tích hợp sẵn</span>` : ""}
-        <div style="font-size:12.5px;color:var(--ink-2);margin-top:2px;">${esc(sk.desc || "")}</div>
-      </div>
-      <div class="sw ${on?"on":""}" onclick="toggleSkillPill('${sk.id}');renderSkillsPage()"></div>
-      ${!sk.builtin ? `<button class="mini-act tap" onclick="openSkillEditor('${sk.id}')">✎</button><button class="mini-act tap" onclick="delSkill('${sk.id}')">✕</button>` : ""}
-    </div>`;
-  }).join("");
-}
-function openSkillEditor(id = null) {
-  const sk = id ? S.skills.find(x => x.id === id) : null;
-  document.getElementById("sk-id").value = sk?.id || "";
-  document.getElementById("sk-name").value = sk?.name || "";
-  document.getElementById("sk-desc").value = sk?.desc || "";
-  document.getElementById("sk-prompt").value = sk?.prompt || "";
-  switchView("skill-editor");
-}
-async function saveSkill() {
-  const name = document.getElementById("sk-name").value.trim().replace(/\s+/g,"-").replace(/^@/,"");
-  const desc = document.getElementById("sk-desc").value.trim(), prompt = document.getElementById("sk-prompt").value.trim();
-  if (!name || !prompt) return showToast("Nhập tên và chỉ dẫn");
-  const sk = { id: document.getElementById("sk-id").value || ("sk-" + Date.now()), name, desc, prompt, builtin: false };
-  await dbPut("skills", sk); S.skills = await dbAll("skills"); renderSkillStack(); haptic("ok"); showToast(`Đã lưu @${name}`); switchView("customize");
-}
-async function delSkill(id) { await dbDel("skills", id); S.skills = S.skills.filter(x => x.id !== id); S.skillIds = S.skillIds.filter(x => x !== id); renderSkillStack(); renderSkillsPage(); renderChips(); }
-async function importSkillFile(files) {
-  const f = files?.[0]; if (!f) return;
-  const txt = await f.text();
-  const sk = { id: "sk-" + Date.now(), name: f.name.replace(/\.(md|txt|json)$/i,""), desc: "Nhập từ tệp", prompt: txt, builtin: false };
-  await dbPut("skills", sk); S.skills = await dbAll("skills"); renderSkillStack(); renderSkillsPage(); showToast("Đã nhập kỹ năng");
-}
-
-/* Library & Memory Pages */
-async function saveLib(type, title, data) { const it = { id: "l-"+Date.now()+Math.random(), type, title, data, createdAt: Date.now() }; await dbPut("library", it); S.library.unshift(it); }
-function renderLibrary() {
-  const docs = S.library.filter(x => x.type === "doc"), med = S.library.filter(x => x.type === "media");
-  document.getElementById("lib-body").innerHTML = `
-    <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:8px;">Tài liệu Canvas (${docs.length})</div>
-    ${docs.map(d => `<div class="card-item lg-card" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openCanvasCode(getLib('${d.id}'),'${esc(d.title)}')"><strong style="flex:1;">${esc(d.title)}</strong><button class="mini-act tap" onclick="event.stopPropagation();delLib('${d.id}')">✕</button></div>`).join("") || `<p class="p-sub">Chưa có tài liệu</p>`}
-    <div style="font-size:13.5px;color:var(--ink-2);margin:14px 0 8px;">Nội dung nghe nhìn (${med.length})</div>
-    <div class="media-grid">${med.map(m => `<div class="media-tile"><img src="${m.data}" onclick="openLightbox('${m.data}')" /><button class="media-del tap" onclick="delLib('${m.id}')">✕</button></div>`).join("")}</div>`;
-}
-const getLib = id => S.library.find(x => x.id === id)?.data || "";
-async function delLib(id) { await dbDel("library", id); S.library = S.library.filter(x => x.id !== id); renderLibrary(); }
-
-function renderMemoriesPage() {
-  document.getElementById("mem-list").innerHTML = S.memories.map(m => `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
-      <span style="font-size:13.5px;flex:1;white-space:pre-wrap;opacity:${m.enabled===false?0.45:1};">${esc(m.content)}</span>
-      <button class="btn-s tap" style="padding:4px 10px;font-size:11.5px;" onclick="toggleMemItem('${m.id}');renderMemoriesPage()">${m.enabled===false?"Tắt":"Bật"}</button>
-      <button class="mini-act tap" onclick="delMemory('${m.id}')">✕</button>
-    </div>`).join("") || `<p style="font-size:13px;color:var(--ink-3);">Chưa có dữ kiện trí nhớ nào.</p>`;
-}
-async function addMemory() {
-  const ta = document.getElementById("mem-in"), content = ta.value.trim(); if (!content) return;
-  await addQuickMemory(content); ta.value = ""; renderMemoriesPage();
-}
-async function addQuickMemory(content) {
-  const m = { id: "mem-" + Date.now(), content, enabled: true, ts: Date.now() };
-  S.memories.unshift(m);
-  await apiFetch("/sync/memories", { method: "POST", body: m }).catch(() => {});
-  renderMemoryBar(); haptic("ok"); showToast("Đã lưu vào Trí nhớ tài khoản");
-}
-async function delMemory(id) {
-  S.memories = S.memories.filter(x => x.id !== id);
-  await apiFetch("/sync/memories/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {});
-  renderMemoryBar(); renderMemoriesPage();
-}
-
-/* Appearance, Tools, Canvas, Events */
-function openToolsSheet() { haptic("tap"); document.getElementById("sheet-tools-bg").classList.add("open"); document.getElementById("btn-plus").classList.add("rotated"); }
-function closeToolsSheet() { document.getElementById("sheet-tools-bg").classList.remove("open"); document.getElementById("btn-plus").classList.remove("rotated"); }
-function openSettingsSheet() { toggleSidebar(false); syncAccountUI(); document.getElementById("sheet-settings-bg").classList.add("open"); }
-function closeSettingsSheet() { document.getElementById("sheet-settings-bg").classList.remove("open"); }
-function pickTool(t) { haptic("switch"); S.activeTool = S.activeTool === t ? null : t; closeToolsSheet(); renderChips(); if (S.activeTool) showToast("Đã bật công cụ"); }
-function togglePersonal() { haptic("switch"); S.cfg.personalIntel = !S.cfg.personalIntel; dbPut("kv", S.cfg); document.getElementById("sw-personal").classList.toggle("on", S.cfg.personalIntel); renderMemoryBar(); }
-
-function openAppearanceModal() {
-  const bp = Math.round(((S.cfg.blurPx - 6) / 28) * 100), ap = Math.round(((S.cfg.glassAlpha - 0.35) / 0.55) * 100);
-  openModal(`
-    <h3 style="margin-bottom:6px;">Giao diện Liquid Glass & Haptics</h3>
-    <div class="s-row" onclick="S.cfg.ultraGlass=!S.cfg.ultraGlass;dbPut('kv',S.cfg);applyTheme();this.querySelector('.sw').classList.toggle('on',S.cfg.ultraGlass);haptic('switch')">
-      <span>Kính Ultra (tắt để mượt 120Hz máy yếu)</span><div class="sw ${S.cfg.ultraGlass?"on":""}"></div>
-    </div>
-    <div class="s-row" onclick="S.cfg.haptics=!S.cfg.haptics;dbPut('kv',S.cfg);this.querySelector('.sw').classList.toggle('on',S.cfg.haptics);haptic('ok')">
-      <span>Rung phản hồi xúc giác (Haptics)</span><div class="sw ${S.cfg.haptics?"on":""}"></div>
-    </div>
-    <div class="v-sliders">
-      <div class="v-col"><div class="v-track" id="vt-b"><div class="v-fill" id="vf-b" style="height:${bp}%"></div><div class="v-ico" style="color:#f59e0b;">☀</div></div><span style="font-size:12px;color:var(--ink-2);">Độ mờ <b id="lb-b">${S.cfg.blurPx}px</b></span></div>
-      <div class="v-col"><div class="v-track" id="vt-a"><div class="v-fill" id="vf-a" style="height:${ap}%"></div><div class="v-ico" style="color:#38bdf8;">◈</div></div><span style="font-size:12px;color:var(--ink-2);">Độ đục <b id="lb-a">${Math.round(S.cfg.glassAlpha*100)}%</b></span></div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px;">
-      <button class="btn-p tap" onclick="document.getElementById('in-wall').click()">Đổi hình nền</button>
-      <button class="btn-s tap" onclick="S.cfg.wallpaper='';dbPut('kv',S.cfg);applyTheme();showToast('Nền mặc định')">Nền mặc định</button>
-    </div>`);
-  bindVS("vt-b", r => { S.cfg.blurPx = Math.round(6 + r * 28); document.getElementById("vf-b").style.height = r*100+"%"; document.getElementById("lb-b").textContent = S.cfg.blurPx+"px"; applyTheme(); dbPut("kv", S.cfg); });
-  bindVS("vt-a", r => { S.cfg.glassAlpha = Number((0.35 + r * 0.55).toFixed(2)); document.getElementById("vf-a").style.height = r*100+"%"; document.getElementById("lb-a").textContent = Math.round(S.cfg.glassAlpha*100)+"%"; applyTheme(); dbPut("kv", S.cfg); });
-}
-function bindVS(id, cb) {
-  const el = document.getElementById(id); let d = false;
-  const upd = y => { const r = el.getBoundingClientRect(); cb(Math.max(0.05, Math.min(1, 1 - (y - r.top)/r.height))); };
-  el.onpointerdown = e => { d = true; el.setPointerCapture(e.pointerId); upd(e.clientY); haptic("tap"); };
-  el.onpointermove = e => { if (d) upd(e.clientY); };
-  el.onpointerup = () => { d = false; };
-}
-async function handleWallUpload(files) { const f = files?.[0]; if (!f) return; S.cfg.wallpaper = (await processImageFile(f)).dataUrl; await dbPut("kv", S.cfg); applyTheme(); showToast("Đã đổi hình nền"); }
-
-function openCanvasEmpty() { openCanvasCode("<!DOCTYPE html><html><body style='font-family:sans-serif;padding:24px;'><h2>Chat GPT Canvas</h2></body></html>", "Canvas mới"); }
-function openCanvasCode(code, title) { document.getElementById("canvas-title").textContent = title; document.getElementById("canvas-ed").value = code; document.getElementById("canvas-fr").srcdoc = code; document.getElementById("canvas-ov").classList.add("open"); S.canvasPreviewOnly = window.innerWidth < 768; applyCvView(); }
-function closeCanvas() { document.getElementById("canvas-ov").classList.remove("open"); }
-function toggleCanvasMode() { S.canvasPreviewOnly = !S.canvasPreviewOnly; applyCvView(); }
-function applyCvView() { const e = document.getElementById("canvas-ed"), f = document.getElementById("canvas-fr"); e.style.display = S.canvasPreviewOnly ? "none" : "block"; f.style.display = (S.canvasPreviewOnly || window.innerWidth >= 900) ? "block" : "none"; document.getElementById("btn-cv-mode").textContent = S.canvasPreviewOnly ? "Sửa mã" : "Xem trước"; }
-async function saveCanvasLib() { await saveLib("doc", document.getElementById("canvas-title").textContent, document.getElementById("canvas-ed").value); haptic("ok"); showToast("Đã lưu vào Thư viện"); }
-
-function bindEvents() {
-  const ta = document.getElementById("prompt-in");
-  ta.addEventListener("input", () => { autoGrow(); updateOrbButton(); checkAtTrigger(ta.value); });
-  ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth >= 768) { e.preventDefault(); sendPrompt(); } });
-  const sc = document.getElementById("chat-scroll");
-  sc.addEventListener("scroll", () => { document.getElementById("btn-scroll-down").classList.toggle("show", !isNearBottom() && S.activeChatId !== null); }, { passive: true });
-  document.addEventListener("click", e => { if (!e.target.closest(".popover") && !e.target.closest("#btn-model-trigger") && !e.target.closest("#btn-chat-more")) closePopovers(); });
-  window.addEventListener("resize", () => setWorkMode(S.cfg.workMode, false));
-}
-
-function bindDragSheets() {
-  document.querySelectorAll("[data-drag]").forEach(h => {
-    const sh = document.getElementById(h.dataset.drag); let sy = 0, dy = 0, dr = false;
-    h.onpointerdown = e => { dr = true; sy = e.clientY; dy = 0; sh.classList.add("dragging"); h.setPointerCapture(e.pointerId); };
-    h.onpointermove = e => { if (!dr) return; dy = Math.max(0, e.clientY - sy); sh.style.transform = `translate3d(0,${dy}px,0)`; };
-    h.onpointerup = () => { if (!dr) return; dr = false; sh.classList.remove("dragging"); sh.style.transform = ""; if (dy > 85) { closeToolsSheet(); closeSettingsSheet(); } };
-  });
-}
-
-function isNearBottom() { const sc = document.getElementById("chat-scroll"); return sc.scrollHeight - sc.scrollTop - sc.clientHeight < 120; }
-function scrollToBottom(sm) { const sc = document.getElementById("chat-scroll"); sc.scrollTo({ top: sc.scrollHeight, behavior: sm ? "smooth" : "auto" }); }
-function autoGrow() { const ta = document.getElementById("prompt-in"); ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 128) + "px"; }
-function updateOrbButton() {
-  const has = document.getElementById("prompt-in").value.trim().length > 0 || S.atts.length > 0;
-  const b = document.getElementById("btn-orb-send"), w = document.getElementById("ico-wave"), s = document.getElementById("ico-send"), st = document.getElementById("ico-stop");
-  b.classList.remove("send-mode", "stop-mode");
-  if (S.streaming) { b.classList.add("stop-mode"); w.style.display="none"; s.style.display="none"; st.style.display="block"; }
-  else if (has) { b.classList.add("send-mode"); w.style.display="none"; s.style.display="block"; st.style.display="none"; }
-  else { w.style.display="block"; s.style.display="none"; st.style.display="none"; }
-}
-function checkAtTrigger(v) {
-  const pop = document.getElementById("at-popup"), m = v.match(/@([a-zA-Z0-9_-]*)$/);
-  if (!m) { pop.classList.remove("open"); return; }
-  const list = S.skills.filter(s => s.name.toLowerCase().includes(m[1].toLowerCase()));
-  if (!list.length) { pop.classList.remove("open"); return; }
-  pop.innerHTML = list.map(sk => `<button class="drop-opt tap-soft" onclick="pickAt('${sk.id}')"><div class="opt-main"><div class="opt-title">@${esc(sk.name)}</div><div class="opt-sub">${esc(sk.desc||"")}</div></div></button>`).join("");
-  pop.classList.add("open");
-}
-function pickAt(id) {
-  const ta = document.getElementById("prompt-in"); ta.value = ta.value.replace(/@[a-zA-Z0-9_-]*$/, "");
-  if (!S.skillIds.includes(id)) S.skillIds.push(id);
-  document.getElementById("at-popup").classList.remove("open"); renderSkillStack(); renderChips(); ta.focus();
-}
-function renderChips() {
-  const c = [];
-  if (S.activeTool) c.push(`<span class="chip">⚡ ${esc(S.activeTool)} <button onclick="S.activeTool=null;renderChips()">×</button></span>`);
-  if (S.activeNbId) { const n = S.notebooks.find(x => x.id === S.activeNbId); if (n) c.push(`<span class="chip">📒 ${esc(n.title)} <button onclick="S.activeNbId=null;renderChips();renderNbList()">×</button></span>`); }
-  S.atts.forEach((a, i) => {
-    if (a.dataUrl) {
-      c.push(`<span class="chip"><img src="${a.dataUrl}" onclick="openVisionStudio(${i})" /><span>${esc(a.name.slice(0,14))}</span> <span class="edit-tag" onclick="openVisionStudio(${i})">${a.enhanced?"✨Nét":"🔍Soi/Nét"}</span> <button onclick="S.atts.splice(${i},1);renderChips();updateOrbButton()">×</button></span>`);
-    } else {
-      c.push(`<span class="chip">📄 ${esc(a.name.slice(0,18))} <button onclick="S.atts.splice(${i},1);renderChips();updateOrbButton()">×</button></span>`);
-    }
-  });
-  document.getElementById("chips-bar").innerHTML = c.join("");
-}
-
-function openModal(html) { document.getElementById("modal-box").innerHTML = html; document.getElementById("modal-bg").classList.add("open"); }
-function closeModal() { document.getElementById("modal-bg").classList.remove("open"); }
-function openLightbox(src) { openModal(`<img src="${src}" style="width:100%;border-radius:16px;margin-bottom:10px;"/><div style="display:flex;justify-content:flex-end;gap:8px;"><a class="btn-s tap" href="${src}" download="chatgpt-hd.jpg" style="text-decoration:none;">Tải ảnh</a><button class="btn-p tap" onclick="closeModal()">Đóng</button></div>`); }
-let tTimer = null;
-function showToast(msg) { const t = document.getElementById("toast"); document.getElementById("toast-msg").textContent = msg; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show"); clearTimeout(tTimer); tTimer = setTimeout(() => t.classList.remove("show"), 2600); }
-function copyText(txt, ok = "Đã sao chép") { navigator.clipboard?.writeText(txt).then(() => showToast(ok)).catch(() => showToast("Không thể sao chép")); }
-
-boot();
-
 </script>
+<script src="skills-pack.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
