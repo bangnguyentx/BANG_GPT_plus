@@ -34,12 +34,11 @@ jobs:
           RUN_NUM: ${{ github.run_number }}
         run: |
           mkdir -p www
-          if [ -f "index.html" ] && [ ! -f "www/index.html" ]; then
-            cp index.html www/index.html
-          fi
-          if [ -f "skills-pack.js" ] && [ ! -f "www/skills-pack.js" ]; then
-            cp skills-pack.js www/skills-pack.js
-          fi
+          for f in index.html app.css app.js skills-pack.js logo.png logo-mark.png; do
+            if [ -f "$f" ] && [ ! -f "www/$f" ]; then
+              cp "$f" "www/$f"
+            fi
+          done
 
           node << 'EOF'
           const fs = require("fs");
@@ -65,6 +64,26 @@ jobs:
           npm init -y
           npm install @capacitor/core@6.2.0 @capacitor/cli@6.2.0 @capacitor/android@6.2.0
           npx cap add android
+
+      - name: Thay toàn bộ Icon App Android bằng logo.png
+        run: |
+          if [ -f "www/logo.png" ]; then
+            sudo apt-get update -y
+            sudo apt-get install -y imagemagick
+            for spec in "mdpi:48:108" "hdpi:72:162" "xhdpi:96:216" "xxhdpi:144:324" "xxxhdpi:192:432"; do
+              IFS=':' read -r D S FG <<< "$spec"
+              DIR="android/app/src/main/res/mipmap-$D"
+              mkdir -p "$DIR"
+              convert www/logo.png -resize "${S}x${S}" "$DIR/ic_launcher.png"
+              convert www/logo.png -resize "${S}x${S}" "$DIR/ic_launcher_round.png"
+              convert www/logo.png -resize "${FG}x${FG}" "$DIR/ic_launcher_foreground.png"
+            done
+            mkdir -p android/app/src/main/res/values
+            printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#05070e</color>\n</resources>\n' > android/app/src/main/res/values/ic_launcher_background.xml
+            echo "Da thay Icon App Android thanh cong."
+          else
+            echo "Khong tim thay www/logo.png, giu icon mac dinh."
+          fi
 
       - name: Chuẩn bị Keystore ký cố định
         id: keystore
