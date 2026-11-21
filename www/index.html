@@ -4,27 +4,21 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#07080c" />
-<title>Chat GPT</title>
+<title>API AI</title>
 <link rel="icon" type="image/png" href="logo.png" />
 <link rel="stylesheet" href="app.css" />
 </head>
 <body>
 <div id="wallpaper"></div>
 
-<!-- AUTH SCREEN -->
+<!-- 1. AUTH SCREEN (No public gear button — 7-tap secret Admin backdoor on Logo!) -->
 <div id="auth-gate" class="gate-screen">
   <div class="gate-card lg-float">
-    <div style="display:flex;justify-content:flex-end;">
-      <button class="icon-btn tap" onclick="openServerUrlModal()" aria-label="Cấu hình Server">
-        <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.82-.33 1.7 1.7 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.51 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .33-1.82 1.7 1.7 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.51-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.82.33h.08a1.7 1.7 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51h.08a1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.33 1.82v.08a1.7 1.7 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
-      </button>
-    </div>
-
-    <div class="gate-brand">
-      <div class="gate-logo-frame">
-        <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="36" height="36" />
+    <div class="gate-brand" style="margin-top:4px;">
+      <div class="gate-logo-frame tap" onclick="handleSecretLogoTap()" title="API AI">
+        <img class="brand-mark" src="logo-mark.png" alt="API AI" width="36" height="36" />
       </div>
-      <h1 class="gate-title">Chat GPT</h1>
+      <h1 class="gate-title">API AI</h1>
       <p class="gate-sub">Đăng nhập hoặc tạo tài khoản để đồng bộ lịch sử trò chuyện</p>
     </div>
 
@@ -55,8 +49,8 @@
         <input id="rg-email" type="email" class="field" placeholder="name@gmail.com" />
       </div>
       <div>
-        <label class="f-lbl" for="rg-pass">Mật khẩu</label>
-        <input id="rg-pass" type="password" class="field" placeholder="Tối thiểu 6 ký tự" />
+        <label class="f-lbl" for="rg-pass">Mật khẩu (tối thiểu 6 ký tự)</label>
+        <input id="rg-pass" type="password" class="field" placeholder="Tạo mật khẩu" />
       </div>
       <div>
         <label class="f-lbl" for="rg-pass2">Nhập lại mật khẩu</label>
@@ -64,17 +58,15 @@
       </div>
       <button class="btn-p tap" style="width:100%;margin-top:8px;" onclick="submitRegister()">Đăng ký và tiếp tục</button>
     </div>
-
-    <div id="auth-server-hint" style="text-align:center;font-size:12px;color:var(--ink-3);"></div>
   </div>
 </div>
 
-<!-- KEY ACTIVATION GATE -->
+<!-- 2. KEY ACTIVATION GATE -->
 <div id="key-gate" class="gate-screen">
   <div class="gate-card lg-float">
     <div class="gate-brand">
       <div class="gate-logo-frame">
-        <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="36" height="36" />
+        <img class="brand-mark" src="logo-mark.png" alt="API AI" width="36" height="36" />
       </div>
       <h2 class="gate-title">Kích hoạt Key bản quyền</h2>
       <p id="key-gate-desc" class="gate-sub">Mỗi Key gắn cố định cho một tài khoản Email. Nhập mã Key để tiếp tục.</p>
@@ -87,7 +79,7 @@
 
     <div>
       <label class="f-lbl" for="key-activate-in">Mã Key kích hoạt</label>
-      <input id="key-activate-in" class="field" placeholder="BANG-1M-XXXX-XXXX" style="text-align:center;font-family:var(--font-mono);font-weight:500;" />
+      <input id="key-activate-in" class="field" placeholder="APIAI-PRO-1M-XXXX-XXXX" style="text-align:center;font-family:var(--font-mono);font-weight:500;" />
     </div>
 
     <button class="btn-p tap" style="width:100%;" onclick="submitActivateKey()">Kích hoạt ngay</button>
@@ -98,6 +90,21 @@
   </div>
 </div>
 
+<!-- 3. MAINTENANCE GATE (Regular users only; Admin bypasses) -->
+<div id="maint-gate" class="gate-screen" style="z-index:210;">
+  <div class="gate-card lg-float" style="text-align:center;">
+    <div class="gate-brand">
+      <div class="gate-logo-frame">
+        <img class="brand-mark" src="logo-mark.png" alt="API AI" width="36" height="36" />
+      </div>
+      <h2 class="gate-title">Hệ thống đang bảo trì</h2>
+      <p id="maint-msg" class="gate-sub">Hệ thống API AI đang bảo trì nâng cấp. Vui lòng quay lại sau ít phút.</p>
+    </div>
+    <button class="btn-p tap" style="width:100%;" onclick="refreshSession()">Thử kết nối lại</button>
+    <button class="btn-s tap" style="width:100%;" onclick="logoutUser()">Đăng xuất</button>
+  </div>
+</div>
+
 <!-- MAIN APP SHELL -->
 <div id="app">
   <div id="scrim" onclick="toggleSidebar(false)"></div>
@@ -105,8 +112,8 @@
   <aside id="sidebar">
     <div class="sb-top">
       <div class="brand-row">
-        <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="24" height="24" />
-        <span>Chat GPT</span>
+        <img class="brand-mark" src="logo-mark.png" alt="API AI" width="24" height="24" />
+        <span>API AI</span>
       </div>
       <div style="display:flex;gap:2px;">
         <button class="icon-btn tap" onclick="toggleAcc('sb-search-acc')" aria-label="Tìm kiếm">
@@ -137,7 +144,7 @@
       </button>
       <button class="nav-row tap-soft" onclick="switchView('customize')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        <span>Kỹ năng</span>
+        <span>Kỹ năng & GitHub Repo</span>
       </button>
       <button class="nav-row tap-soft" onclick="switchView('library')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.8"/></svg>
@@ -157,9 +164,7 @@
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
         </button>
       </div>
-      <div id="nb-acc" class="acc-wrap open">
-        <div class="acc-inner" id="sb-nb-list"></div>
-      </div>
+      <div id="nb-acc" class="acc-wrap open"><div class="acc-inner" id="sb-nb-list"></div></div>
 
       <div class="sb-sec-head">
         <button class="sb-sec-toggle tap" onclick="toggleAcc('chats-acc','chev-chats')">
@@ -170,14 +175,12 @@
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4L3 5Z"/></svg>
         </button>
       </div>
-      <div id="chats-acc" class="acc-wrap open">
-        <div class="acc-inner" id="sb-chats-list"></div>
-      </div>
+      <div id="chats-acc" class="acc-wrap open"><div class="acc-inner" id="sb-chats-list"></div></div>
     </div>
 
     <div class="sb-foot">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer;" onclick="openSettingsSheet()">
-        <div class="avatar" id="sb-avatar">C</div>
+        <div class="avatar" id="sb-avatar">A</div>
         <div style="min-width:0;">
           <div id="sb-user-email" style="font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div>
           <div id="sb-user-plan" style="font-size:12px;color:var(--ink-3);">Chưa đăng nhập</div>
@@ -197,7 +200,7 @@
           <span id="menu-badge-dot" class="badge-dot num"></span>
         </button>
         <button id="btn-model-trigger" class="model-pill-btn tap" onclick="toggleModelDropdown(event)">
-          <span id="top-model-text">Neon Cao</span>
+          <span id="top-model-text">GPT 6.2 Sol Cao</span>
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
         </button>
       </div>
@@ -239,14 +242,24 @@
 
     <!-- VIEW 1: CHAT -->
     <section id="view-chat" class="view active">
-      <div id="memory-bar-wrap">
+      <div id="top-stack-wrap">
+        <div id="app-notice-bar" class="notice-bar">
+          <span id="app-notice-text" style="flex:1;line-height:1.4;"></span>
+          <button class="mini-act tap" onclick="document.getElementById('app-notice-bar').classList.remove('show')" aria-label="Đóng thông báo">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
         <div class="mem-pill-bar lg-float">
           <button class="mem-bar-head tap-soft" onclick="toggleAcc('mem-bar-acc','chev-mem-bar')">
             <span class="mem-bar-title">
               <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>
               <span id="mem-bar-label" class="num">Trí nhớ đang dùng (0 mục)</span>
             </span>
-            <span id="chev-mem-bar" class="chev"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span id="chat-pin-badge" class="tag-quiet" style="display:none;font-family:var(--font-mono);font-size:10.5px;"></span>
+              <span id="chev-mem-bar" class="chev"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+            </span>
           </button>
           <div id="mem-bar-acc" class="acc-wrap">
             <div class="acc-inner"><div class="mem-bar-body" id="mem-bar-content"></div></div>
@@ -258,12 +271,12 @@
         <div class="chat-col">
           <div id="empty-hero">
             <div class="hero-logo-box lg-card">
-              <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="34" height="34" />
+              <img class="brand-mark" src="logo-mark.png" alt="API AI" width="34" height="34" />
             </div>
             <h1 id="hero-title">Chúng ta nên bắt đầu từ đâu nhỉ?</h1>
             <div class="status-chip lg-card">
               <span class="dot-live"></span>
-              <span id="hero-quota-txt" class="num">Chat GPT · Đã sẵn sàng</span>
+              <span id="hero-quota-txt" class="num">API AI · Đã sẵn sàng</span>
             </div>
           </div>
           <div id="messages"></div>
@@ -301,7 +314,7 @@
             <button id="btn-plus" class="plus-btn tap" onclick="openToolsSheet()" aria-label="Công cụ và đính kèm">
               <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
             </button>
-            <textarea id="prompt-in" rows="1" placeholder="Hỏi Chat GPT"></textarea>
+            <textarea id="prompt-in" rows="1" placeholder="Hỏi API AI"></textarea>
             <button id="btn-mic" class="mic-btn tap" onclick="toggleVoiceDictate()" aria-label="Nhập giọng nói">
               <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
             </button>
@@ -321,7 +334,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;">
           <div>
             <h2 class="p-title" style="margin:0;">Quản trị Admin</h2>
-            <div style="font-size:12.5px;color:var(--ink-3);">Quản lý Key, Email, Quên mật khẩu, API và Giới hạn gói</div>
+            <div style="font-size:12.5px;color:var(--ink-3);">Key 4 hạng · Email · Nguồn API · Model · Thông báo</div>
           </div>
           <div style="display:flex;gap:6px;">
             <button class="btn-s tap" onclick="loadAdminData()">Tải lại</button>
@@ -330,27 +343,29 @@
         </div>
         <div class="admin-tabs">
           <button class="admin-tab active tap" data-adtab="keys" onclick="setAdminTab('keys')">Key bản quyền</button>
+          <button class="admin-tab tap" data-adtab="tiers" onclick="setAdminTab('tiers')">Quyền 4 Hạng Key</button>
+          <button class="admin-tab tap" data-adtab="api" onclick="setAdminTab('api')">Nguồn API & Model</button>
           <button class="admin-tab tap" data-adtab="users" onclick="setAdminTab('users')">Tài khoản Email</button>
-          <button class="admin-tab tap" data-adtab="resets" onclick="setAdminTab('resets')">Quên mật khẩu <span id="tab-rst-count" class="num"></span></button>
-          <button class="admin-tab tap" data-adtab="api" onclick="setAdminTab('api')">API và Model</button>
-          <button class="admin-tab tap" data-adtab="limits" onclick="setAdminTab('limits')">Giới hạn gói</button>
+          <button class="admin-tab tap" data-adtab="resets" onclick="setAdminTab('resets')">Quên MK <span id="tab-rst-count" class="num"></span></button>
+          <button class="admin-tab tap" data-adtab="system" onclick="setAdminTab('system')">Hệ thống</button>
         </div>
         <div id="admin-body"></div>
       </div>
     </section>
 
-    <!-- VIEW 3: SKILLS -->
+    <!-- VIEW 3: SKILLS & GITHUB REPO -->
     <section id="view-customize" class="view">
       <div class="page-body">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:6px;flex-wrap:wrap;">
           <button class="btn-s tap" onclick="switchView('chat')">Quay lại</button>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button id="btn-gh-import" class="btn-blue tap" onclick="openGithubImportModal()">+ Cài GitHub Repo <span class="tag-st tier-pro_max" style="background:rgba(255,255,255,0.2);color:#fff;">Pro Max+</span></button>
             <button class="btn-s tap" onclick="document.getElementById('in-skill-file').click()">Nhập tệp</button>
-            <button class="btn-p tap" onclick="openSkillEditor()">Tạo kỹ năng</button>
+            <button class="btn-p tap" onclick="openSkillEditor()">Tạo mới</button>
           </div>
         </div>
-        <h2 class="p-title">Kỹ năng Chat GPT</h2>
-        <p class="p-sub">Đã tích hợp 4 bộ chuẩn: @hallmark, @taste-skill, @unslop và @material-design-3-ui. Bật nhanh nhiều kỹ năng cùng lúc ở thanh Skills.</p>
+        <h2 class="p-title">Kỹ năng API AI</h2>
+        <p class="p-sub">Tích hợp 4 bộ chuẩn (@hallmark, @taste-skill, @unslop, @material-design-3-ui). Hạng Pro Max trở lên có thể cài nguyên trạng Repository từ GitHub kèm Mini-RAG tự rút file liên quan.</p>
         <div id="customize-body"></div>
       </div>
     </section>
@@ -369,7 +384,7 @@
           <label class="f-lbl" for="sk-desc">Mô tả</label>
           <input id="sk-desc" class="field" placeholder="Mô tả ngắn gọn kỹ năng" />
           <label class="f-lbl" for="sk-prompt">Chỉ dẫn hệ thống</label>
-          <textarea id="sk-prompt" class="field" rows="9" placeholder="Nhập chỉ dẫn chi tiết cho Chat GPT"></textarea>
+          <textarea id="sk-prompt" class="field" rows="9" placeholder="Nhập chỉ dẫn chi tiết cho API AI"></textarea>
         </div>
       </div>
     </section>
@@ -457,19 +472,19 @@
   </div>
 </div>
 
-<!-- SETTINGS SHEET -->
+<!-- SETTINGS SHEET (Server URL row HIDDEN for regular users, VISIBLE for Admin only!) -->
 <div id="sheet-settings-bg" class="sheet-bg" onclick="if(event.target===this) closeSettingsSheet()">
   <div id="sheet-settings" class="sheet">
     <div class="sheet-handle-area" data-drag="sheet-settings"><div class="sheet-handle"></div></div>
     <div class="sheet-body">
       <div class="lg-card" style="padding:12px 14px;border-radius:16px;margin-bottom:6px;font-size:13px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;"><strong id="set-email">-</strong><span class="tag-st st-active" id="set-plan">-</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><strong id="set-email" style="overflow:hidden;text-overflow:ellipsis;">-</strong><span class="tag-st st-active" id="set-plan">-</span></div>
         <div id="set-expiry" style="color:var(--ink-2);margin-top:4px;font-size:12px;"></div>
         <div id="set-usage" class="num" style="color:var(--accent-ink);margin-top:3px;font-size:12px;"></div>
       </div>
       <button class="s-row tap-soft" onclick="closeSettingsSheet(); openAppearanceModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2m10-10h-2M4 12H2"/></svg><span>Giao diện và hiệu năng</span></span><span style="color:var(--ink-3);">›</span></button>
       <button class="s-row tap-soft" onclick="closeSettingsSheet(); checkAppUpdate(false)"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span>Kiểm tra cập nhật (v__APP_VERSION_NAME__)</span></span><span style="color:var(--ink-3);">›</span></button>
-      <button class="s-row tap-soft" onclick="closeSettingsSheet(); openServerUrlModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg><span>Địa chỉ Server Cloudflare</span></span><span style="color:var(--ink-3);">›</span></button>
+      <button id="set-server-row" class="s-row tap-soft" style="display:none;" onclick="closeSettingsSheet(); openServerUrlModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg><span>Địa chỉ Server Cloudflare</span></span><span style="color:var(--ink-3);">›</span></button>
       <button class="s-row tap-soft" onclick="closeSettingsSheet(); showKeyGate(true)"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3"/></svg><span>Nhập hoặc gia hạn Key</span></span></button>
       <button class="s-row tap-soft" style="color:#fca5a5;" onclick="closeSettingsSheet(); logoutUser()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Đăng xuất</span></span></button>
     </div>
@@ -479,7 +494,7 @@
 <!-- LIVE VOICE OVERLAY -->
 <div id="live-voice-ov">
   <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;">
-    <img class="brand-mark" src="logo-mark.png" alt="Chat GPT" width="32" height="32" />
+    <img class="brand-mark" src="logo-mark.png" alt="API AI" width="32" height="32" />
     <div id="live-status" style="font-size:17px;font-weight:500;">Đang lắng nghe</div>
   </div>
   <div class="voice-bars" id="live-bars">
@@ -521,7 +536,7 @@
   <span id="toast-msg">Đã lưu</span>
 </div>
 
-<!-- HIDDEN FILE INPUTS -->
+<!-- HIDDEN INPUTS -->
 <input id="in-cam" type="file" accept="image/*" capture="environment" hidden onchange="handleImages(this.files)" />
 <input id="in-img" type="file" accept="image/*" multiple hidden onchange="handleImages(this.files)" />
 <input id="in-vid" type="file" accept="video/*" hidden onchange="handleVideo(this.files)" />
@@ -531,8 +546,8 @@
 
 <script>
 window.__APP_META__ = {
-  verCode: Number("__APP_VERSION_CODE__") || 15,
-  verName: "__APP_VERSION_NAME__".startsWith("__") ? "2.2.0" : "__APP_VERSION_NAME__",
+  verCode: Number("__APP_VERSION_CODE__") || 20,
+  verName: "__APP_VERSION_NAME__".startsWith("__") ? "2.0.20" : "__APP_VERSION_NAME__",
   repo: "__GITHUB_REPO__".startsWith("__") ? "bangnguyentx/BANG_GPT" : "__GITHUB_REPO__",
   workerUrl: "__DEFAULT_WORKER_URL__".startsWith("__") ? "" : "__DEFAULT_WORKER_URL__"
 };
