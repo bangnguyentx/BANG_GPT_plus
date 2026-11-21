@@ -1,8 +1,8 @@
 {
   "appId": "com.bang.chatgpt",
-  "appName": "Chat GPT",
+  "appName": "API AI",
   "webDir": "www",
-  "backgroundColor": "#05070e",
+  "backgroundColor": "#07080c",
   "android": {
     "allowMixedContent": true,
     "captureInput": true,
