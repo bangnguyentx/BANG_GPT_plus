@@ -5,6 +5,10 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -16,16 +20,26 @@ jobs:
       - name: Tải mã nguồn
         uses: actions/checkout@v4
 
-      - name: Cài đặt Node.js 20
+      - name: Cài đặt Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Cài đặt Java 17
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
+
+      - name: Cache Gradle (tăng tốc & chống lỗi 429)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-apiai-cap6-${{ hashFiles('capacitor.config.json', '.github/workflows/build-app.yml') }}
+          restore-keys: |
+            gradle-apiai-cap6-
 
       - name: Chuẩn bị www và cài Capacitor 6
         env:
@@ -59,6 +73,16 @@ jobs:
             .replace(/__DEFAULT_WORKER_URL__/g, apiUrl);
           fs.writeFileSync("www/index.html", html);
           console.log("Injected:", { verCode, verName, repo, hasApiUrl: !!apiUrl });
+
+          // Guarantee captureInput: false so Android Gboard/Laban Vietnamese Telex IME works 100%
+          if (fs.existsSync("capacitor.config.json")) {
+            try {
+              const cc = JSON.parse(fs.readFileSync("capacitor.config.json", "utf8"));
+              cc.android = { ...(cc.android || {}), captureInput: false, allowMixedContent: true };
+              fs.writeFileSync("capacitor.config.json", JSON.stringify(cc, null, 2));
+              console.log("Enforced capacitor.config.json captureInput=false");
+            } catch {}
+          }
           EOF
 
           npm init -y
@@ -79,7 +103,7 @@ jobs:
               convert www/logo.png -resize "${FG}x${FG}" "$DIR/ic_launcher_foreground.png"
             done
             mkdir -p android/app/src/main/res/values
-            printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#07080c</color>\n</resources>\n' > android/app/src/main/res/values/ic_launcher_background.xml
+            printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#07080d</color>\n</resources>\n' > android/app/src/main/res/values/ic_launcher_background.xml
             echo "Da thay Icon App Android thanh cong."
           fi
 
@@ -112,7 +136,7 @@ jobs:
             echo "generated=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Cấu hình AndroidManifest và Signing Release
+      - name: Cấu hình AndroidManifest, Google Maven Mirror và Signing Release
         env:
           RUN_NUM: ${{ github.run_number }}
         run: |
@@ -145,9 +169,21 @@ jobs:
           if (!styles.includes("statusBarColor")) {
             styles = styles.replace(
               "</style>",
-              '    <item name="android:statusBarColor">#07080c</item>\n        <item name="android:navigationBarColor">#07080c</item>\n        <item name="android:windowBackground">#07080c</item>\n    </style>'
+              '    <item name="android:statusBarColor">#07080d</item>\n        <item name="android:navigationBarColor">#07080d</item>\n        <item name="android:windowBackground">#07080d</item>\n    </style>'
             );
             fs.writeFileSync(sPath, styles);
+          }
+
+          // Inject Google's GCS Maven Central Mirror before mavenCentral() to eliminate HTTP 429 rate-limit!
+          const rootGradlePath = "android/build.gradle";
+          if (fs.existsSync(rootGradlePath)) {
+            let rg = fs.readFileSync(rootGradlePath, "utf8");
+            rg = rg.replace(
+              /mavenCentral\(\)/g,
+              'maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }\n        mavenCentral()'
+            );
+            fs.writeFileSync(rootGradlePath, rg);
+            console.log("Injected Google GCS Maven Central Mirror into android/build.gradle");
           }
 
           const gPath = "android/app/build.gradle";
@@ -172,11 +208,23 @@ jobs:
           EOF
           npx cap sync android
 
-      - name: Biên dịch Release APK đã ký
+      - name: Biên dịch Release APK đã ký (có tự động thử lại khi 429)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          for attempt in 1 2 3; do
+            echo "=== Gradle assembleRelease lan thu $attempt/3 ==="
+            if ./gradlew assembleRelease --no-daemon --max-workers=2; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Build that bai sau 3 lan thu."
+              exit 1
+            fi
+            WAIT=$((attempt * 20))
+            echo "Gap loi mang/429, doi ${WAIT}s roi thu lai..."
+            sleep "$WAIT"
+          done
           cp app/build/outputs/apk/release/app-release.apk ../API-AI-v2.0.${{ github.run_number }}.apk
 
       - name: Xuất Artifact APK
