@@ -1,4 +1,4 @@
-/* API AI v3.0 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
+/* API AI v3.1 Craft — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
@@ -23,7 +23,13 @@ const DEFAULT_CFG = {
   id: "cfg", serverUrl: META.workerUrl, token: "", deviceId: "",
   selectedModel: "gpt-6.2-sol", thinkingLevel: "high", workMode: "chat",
   personalIntel: true, imgQuality: "hd", ultraGlass: false, haptics: true,
-  blurPx: 18, glassAlpha: 0.78, wallpaper: ""
+  blurPx: 18, glassAlpha: 0.78, wallpaper: "",
+  agentCfg: {
+    enabledRoles: { architect: true, coder: true, reviewer: true, tester: true },
+    models: { architect: "gpt-6.2-astra", coder: "gpt-6.2-sol", reviewer: "gpt-6.2-astra", tester: "gpt-6-luna" },
+    pauseAfterArchitect: false,
+    maxFixLoops: 1
+  }
 };
 
 const ICON_PIN = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 1 1-1h1V3H7v2h1a1 1 0 0 1 1 1Z"/></svg>`;
@@ -54,10 +60,10 @@ const dbDel = (s, id) => new Promise((r, j) => { const tx = db.transaction(s, "r
 let S = {
   cfg: { ...DEFAULT_CFG }, user: null, system: { notice: {}, maintenance: {} },
   models: [
-    { id: "auto", title: "Tự động", short: "Auto", sub: "Tự chọn model phù hợp nhất", mapped: "auto", allowed: true },
-    { id: "gpt-6-luna", title: "GPT 6 Luna", short: "GPT 6 Luna", sub: "Nhanh, tiết kiệm · ×0.5", mapped: "gpt-6-luna", allowed: true },
-    { id: "gpt-6.2-sol", title: "GPT 6.2 Sol", short: "GPT 6.2 Sol", sub: "Đa năng, ngữ cảnh 500K · ×1", mapped: "gpt-6.2-sol", allowed: true },
-    { id: "gpt-6.2-astra", title: "GPT 6.2 Astra", short: "GPT 6.2 Astra", sub: "Suy luận & lập trình sâu · ×2", mapped: "gpt-6.2-astra", allowed: true }
+    { id: "auto", title: "Tự động", short: "Auto", sub: "Tự chọn model phù hợp nhất", mapped: "auto", cost_multiplier: 1.0, allowed: true },
+    { id: "gpt-6-luna", title: "GPT 6 Luna", short: "GPT 6 Luna", sub: "Nhanh, tiết kiệm · ×0.7", mapped: "gpt-6-luna", cost_multiplier: 0.7, allowed: true },
+    { id: "gpt-6.2-sol", title: "GPT 6.2 Sol", short: "GPT 6.2 Sol", sub: "Đa năng, ngữ cảnh 500K · ×1.2", mapped: "gpt-6.2-sol", cost_multiplier: 1.2, allowed: true },
+    { id: "gpt-6.2-astra", title: "GPT 6.2 Astra", short: "GPT 6.2 Astra", sub: "Lập trình & suy luận sâu · ×2.2", mapped: "gpt-6.2-astra", cost_multiplier: 2.2, allowed: true }
   ],
   chats: [], activeChatId: null, skills: [], notebooks: [], activeNbId: null,
   memories: [], lastCrossRecalls: [], library: [], filter: "all",
@@ -70,6 +76,65 @@ const esc = s => String(s || "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": 
 function haptic(t = "tap") {
   if (!S.cfg?.haptics || !navigator.vibrate) return;
   try { navigator.vibrate({ tap: 8, switch: 14, ok: [10, 26, 12], err: [22, 36, 22] }[t] || 8); } catch {}
+}
+
+
+/* ===== APPLE DESIGN FLUID PHYSICS ENGINE (WWDC 2018: Springs, Velocity Handoff, Momentum Projection, Rubber-Banding) ===== */
+const prefersReducedMotion = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Apple's exact momentum projection function (decelerationRate 0.998 normal, 0.99 snappy)
+function appleProject(velocityPxPerSec, decelerationRate = 0.994) {
+  return (velocityPxPerSec / 1000) * decelerationRate / (1 - decelerationRate);
+}
+
+// Apple's exact rubber-banding function for soft boundaries
+function appleRubberband(overshoot, dimension, constant = 0.55) {
+  return (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
+}
+
+// Critically damped / momentum harmonic spring driven by requestAnimationFrame (interruptible!)
+const activeSprings = new WeakMap();
+function stopSpring(el) {
+  const prev = activeSprings.get(el);
+  if (prev) { cancelAnimationFrame(prev.raf); activeSprings.delete(el); }
+}
+
+function runSpring(el, { from, to, velocity = 0, damping = 1.0, response = 0.34, onUpdate, onDone }) {
+  stopSpring(el);
+  if (prefersReducedMotion() || Math.abs(to - from) < 0.5 && Math.abs(velocity) < 5) {
+    onUpdate(to);
+    if (onDone) onDone();
+    return;
+  }
+  const stiffness = Math.pow((2 * Math.PI) / response, 2);
+  const dampingCoeff = (4 * Math.PI * damping) / response;
+  let pos = from, vel = velocity, lastTs = performance.now();
+  const state = { raf: 0, get pos() { return pos; }, get vel() { return vel; } };
+
+  const tick = now => {
+    const dt = Math.min(0.032, Math.max(0.001, (now - lastTs) / 1000));
+    lastTs = now;
+    const force = -stiffness * (pos - to) - dampingCoeff * vel;
+    vel += force * dt;
+    pos += vel * dt;
+    onUpdate(pos);
+    if (Math.abs(pos - to) < 0.4 && Math.abs(vel) < 4) {
+      onUpdate(to);
+      activeSprings.delete(el);
+      if (onDone) onDone();
+      return;
+    }
+    state.raf = requestAnimationFrame(tick);
+  };
+  state.raf = requestAnimationFrame(tick);
+  activeSprings.set(el, state);
+}
+
+// Transform-only Segmented Pill Positioning (Hallmark Floor 2: NEVER animate width!)
+function moveSegThumb(thumbEl, targetBtn) {
+  if (!thumbEl || !targetBtn) return;
+  const scaleX = Math.max(0.1, targetBtn.offsetWidth / 100);
+  thumbEl.style.transform = `translate3d(${targetBtn.offsetLeft}px, 0, 0) scaleX(${scaleX})`;
 }
 
 /* ===== 7-TAP SECRET ADMIN BACKDOOR ON LOGIN LOGO (5B) ===== */
@@ -89,7 +154,18 @@ function handleSecretLogoTap() {
 async function boot() {
   await openDB();
   const saved = await dbGet("kv", "cfg");
-  if (saved) S.cfg = { ...DEFAULT_CFG, ...saved };
+  if (saved) {
+    S.cfg = {
+      ...DEFAULT_CFG,
+      ...saved,
+      agentCfg: {
+        ...DEFAULT_CFG.agentCfg,
+        ...(saved.agentCfg || {}),
+        enabledRoles: { ...DEFAULT_CFG.agentCfg.enabledRoles, ...(saved.agentCfg?.enabledRoles || {}) },
+        models: { ...DEFAULT_CFG.agentCfg.models, ...(saved.agentCfg?.models || {}) }
+      }
+    };
+  }
   if (!S.cfg.serverUrl && META.workerUrl) S.cfg.serverUrl = META.workerUrl;
   if (!S.cfg.deviceId) S.cfg.deviceId = "dev-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
   // Migrate legacy chemistry selectedModel IDs cleanly
@@ -148,7 +224,7 @@ function setAuthTab(tab) {
   const seg = document.getElementById("auth-seg"), th = document.getElementById("auth-thumb");
   seg.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.atab === tab));
   const act = seg.querySelector(`.seg-btn[data-atab="${tab}"]`);
-  if (act && th) { th.style.width = act.offsetWidth + "px"; th.style.transform = `translate3d(${act.offsetLeft - 3}px,0,0)`; }
+  if (act && th) moveSegThumb(th, act);
   document.getElementById("form-login").style.display = tab === "login" ? "flex" : "none";
   document.getElementById("form-register").style.display = tab === "register" ? "flex" : "none";
 }
@@ -232,7 +308,9 @@ async function onSessionReady(user, models, system) {
   }
   showAuthGate(false);
   applySystemMeta(system);
-  showKeyGate(!user.licenseActive && user.role !== "admin");
+  const mustChg = Boolean(user.mustChangePassword) && user.role !== "admin";
+  showForcePwdGate(mustChg);
+  showKeyGate(!mustChg && !user.licenseActive && user.role !== "admin");
   await pullCloudData();
   syncAccountUI();
   renderModelDropdown();
@@ -273,13 +351,13 @@ async function submitForgotPassword() {
     haptic("ok");
     openModal(`<div style="text-align:center;padding:6px 0;">
       <h3 style="font-size:18px;font-weight:520;margin-bottom:8px;">Đã tiếp nhận yêu cầu</h3>
-      <p style="font-size:14.5px;color:#dbeafe;line-height:1.55;">${esc(data.message)}</p>
+      <p style="font-size:14.5px;color:var(--info-ink);line-height:1.55;">${esc(data.message)}</p>
       <button class="btn-p tap" style="width:100%;margin-top:16px;" onclick="closeModal()">Đã hiểu</button></div>`);
   } catch (e) { haptic("err"); showToast(e.message); }
 }
 async function logoutUser() {
   haptic("tap"); S.cfg.token = ""; S.user = null; S.chats = []; S.memories = []; S.activeChatId = null;
-  await dbPut("kv", S.cfg); showKeyGate(false); document.getElementById("maint-gate").classList.remove("open"); showAuthGate(true); showToast("Đã đăng xuất");
+  await dbPut("kv", S.cfg); showKeyGate(false); showForcePwdGate(false); document.getElementById("maint-gate").classList.remove("open"); showAuthGate(true); showToast("Đã đăng xuất");
 }
 function openServerUrlModal() {
   openModal(`
@@ -297,6 +375,66 @@ async function saveServerUrl() {
   S.cfg.serverUrl = val; await dbPut("kv", S.cfg); closeModal();
   try { const r = await fetch(val + "/health"); showToast(r.ok ? "Kết nối Server thành công" : "HTTP " + r.status); }
   catch (e) { showToast("Lỗi kết nối: " + e.message); }
+}
+
+
+/* ===== FORCED PASSWORD CHANGE & SELF-CHANGE PASSWORD (4B + ĐỘT PHÁ) ===== */
+function showForcePwdGate(show) {
+  const el = document.getElementById("force-pwd-gate");
+  if (el) el.classList.toggle("open", Boolean(show));
+}
+
+async function submitForcedPasswordChange() {
+  haptic("tap");
+  const newPassword = document.getElementById("fp-new1").value;
+  const confirmPassword = document.getElementById("fp-new2").value;
+  if (newPassword.length < 6) return showToast("Mật khẩu mới phải từ 6 ký tự");
+  if (newPassword !== confirmPassword) return showToast("Nhập lại mật khẩu không khớp");
+  try {
+    const r = await apiFetch("/auth/change-password", { method: "POST", body: { newPassword, confirmPassword } });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "Đổi mật khẩu thất bại");
+    S.cfg.token = data.token;
+    await dbPut("kv", S.cfg);
+    document.getElementById("fp-new1").value = "";
+    document.getElementById("fp-new2").value = "";
+    showForcePwdGate(false);
+    haptic("ok");
+    showToast("Đã lưu mật khẩu mới thành công");
+    await onSessionReady(data.user, data.models, data.system);
+  } catch (e) { haptic("err"); showToast(e.message); }
+}
+
+function openSelfChangePasswordModal() {
+  haptic("tap");
+  openModal(`
+    <h3 style="font-size:17px;font-weight:520;margin-bottom:6px;">Đổi mật khẩu</h3>
+    <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px;">Cập nhật mật khẩu mới cho tài khoản <b>${esc(S.user?.email || "")}</b>.</p>
+    <label class="f-lbl">Mật khẩu hiện tại</label><input id="sc-cur" type="password" class="field" placeholder="Nhập mật khẩu hiện tại" />
+    <label class="f-lbl">Mật khẩu mới (tối thiểu 6 ký tự)</label><input id="sc-n1" type="password" class="field" placeholder="Nhập mật khẩu mới" />
+    <label class="f-lbl">Nhập lại mật khẩu mới</label><input id="sc-n2" type="password" class="field" placeholder="Nhập lại mật khẩu mới" />
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button class="btn-s tap" onclick="closeModal()">Hủy</button>
+      <button class="btn-p tap" onclick="submitSelfPasswordChange()">Đổi mật khẩu</button>
+    </div>`);
+}
+
+async function submitSelfPasswordChange() {
+  const currentPassword = document.getElementById("sc-cur").value;
+  const newPassword = document.getElementById("sc-n1").value;
+  const confirmPassword = document.getElementById("sc-n2").value;
+  if (!currentPassword || newPassword.length < 6) return showToast("Nhập đầy đủ mật khẩu (tối thiểu 6 ký tự)");
+  if (newPassword !== confirmPassword) return showToast("Nhập lại mật khẩu mới không khớp");
+  try {
+    const r = await apiFetch("/auth/change-password", { method: "POST", body: { currentPassword, newPassword, confirmPassword } });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "Đổi mật khẩu thất bại");
+    S.cfg.token = data.token;
+    await dbPut("kv", S.cfg);
+    closeModal();
+    haptic("ok");
+    showToast("Đã đổi mật khẩu thành công");
+  } catch (e) { haptic("err"); showToast(e.message); }
 }
 
 /* ===== CLOUD SYNC & ACCOUNT UI (HIDES SERVER URL FROM REGULAR USERS!) ===== */
@@ -556,8 +694,9 @@ function renderMemoryBar() {
   const total = act.length + rec.length + (roll ? 1 : 0);
   document.getElementById("mem-bar-label").textContent = S.cfg.personalIntel ? `Trí nhớ đang dùng (${total} mục)` : "Trí nhớ đang tắt";
 
+  const isAdmin = S.user?.role === "admin";
   const pinBadge = document.getElementById("chat-pin-badge");
-  if (chat?.pinnedSlotLabel) {
+  if (isAdmin && chat?.pinnedSlotLabel) {
     pinBadge.textContent = chat.pinnedSlotLabel;
     pinBadge.style.display = "inline-block";
   } else {
@@ -565,7 +704,7 @@ function renderMemoryBar() {
   }
 
   let html = "";
-  if (chat?.pinnedSlotLabel) html += `<div class="mem-chip-row"><span>API ghim cho đoạn chat này: <b>${esc(chat.pinnedSlotLabel)}</b></span><span class="tag-st st-active">Cố định</span></div>`;
+  if (isAdmin && chat?.pinnedSlotLabel) html += `<div class="mem-chip-row"><span>API ghim cho đoạn chat này: <b>${esc(chat.pinnedSlotLabel)}</b></span><span class="tag-st st-active">Cố định</span></div>`;
   if (roll) html += `<div class="mem-chip-row"><span>Tóm tắt cuộn (${chat.messages.length - 20} tin cũ)</span><span class="tag-st st-active">Bật</span></div>`;
   rec.forEach(r => html += `<div class="mem-chip-row"><span>${esc(r.chatTitle)}: ${esc(r.snippet.slice(0, 80))}</span><span class="tag-st st-unused">Cross-Chat</span></div>`);
   S.memories.forEach(m => html += `<div class="mem-chip-row"><span style="flex:1;opacity:${m.enabled===false?0.45:1};">${esc(m.content.slice(0, 88))}</span><button class="btn-s tap" style="height:26px;padding:0 9px;font-size:11px;" onclick="toggleMemItem('${m.id}')">${m.enabled===false?"Tắt":"Bật"}</button><button class="mini-act tap" onclick="delMemory('${m.id}')">${ICON_X}</button></div>`);
@@ -743,6 +882,360 @@ async function switchChatApiWithSummary(failedMsgId) {
   await sendPrompt(lastUserMsg.text, { reuseLastUser: true, forceSwitch: true, handoffSummary: handoff });
 }
 
+
+/* =========================================================================
+   SMART IMAGE INTENT DETECTOR (2A) + 4-AGENT DEV PIPELINE (1A + 1B + 1C + USER MODELS)
+   ========================================================================= */
+function canUseFourAgent() {
+  return S.user?.role === "admin" || Boolean(S.user?.limits?.allow_four_agent);
+}
+
+function detectImageIntent(text, chat) {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return null;
+  // Never hijack coding/diagram/UI design requests
+  if (/(viết code|lập trình|html|css|javascript|python|pine script|mql5|svg|react|canvas|giao diện web)/i.test(t)) return null;
+
+  // 1. Direct explicit draw / generate image intent
+  if (/^(hãy\s+)?(tạo|vẽ|sinh|render|thiết kế)\s+(giúp\s+|cho\s+(mình|tôi|em)\s+)?(1\s+|một\s+)?(hình|ảnh|bức ảnh|bức tranh|tranh|nhân vật|chibi|logo|avatar|poster|wallpaper)/i.test(t)
+    || /^(generate|create|draw|paint)\s+(an?\s+)?(image|picture|photo|illustration|art|chibi|logo)/i.test(t)) {
+    return text.trim();
+  }
+
+  // 2. Follow-up answer right after AI asked clarifying style questions about an image (like 41726.jpg / 41727.jpg!)
+  const msgs = chat?.messages || [];
+  const prevAi = [...msgs].reverse().find(m => m.role === "assistant" && m.text);
+  const prevUser = [...msgs].reverse().find(m => m.role === "user" && m.text && m.text.trim() !== text.trim());
+  if (prevAi && /(tạo hình|tạo ảnh|phong cách|bối cảnh.*tư thế|mô tả ảnh)/i.test(prevAi.text) && t.length < 180) {
+    if (prevUser && /(tạo hình|tạo ảnh|vẽ|chibi|chupi|nhân vật)/i.test(prevUser.text)) {
+      return `${prevUser.text.trim()} — chi tiết: ${text.trim()}`;
+    }
+  }
+  return null;
+}
+
+const AGENT_ROLES = [
+  { id: "architect", num: 1, title: "Architect", sub: "Kiến trúc sư trưởng" },
+  { id: "coder", num: 2, title: "Coder", sub: "Lập trình viên" },
+  { id: "reviewer", num: 3, title: "Reviewer", sub: "Thẩm định viên" },
+  { id: "tester", num: 4, title: "Tester", sub: "Kỹ sư kiểm thử" }
+];
+
+function getAllowedRealModels() {
+  const list = (S.models || []).filter(m => m.allowed && m.mapped !== "auto");
+  return list.length ? list : (S.models || []).filter(m => m.allowed);
+}
+
+function renderAgentConfigPanel() {
+  const box = document.getElementById("agent-cfg-box");
+  if (!box) return;
+  const ac = S.cfg.agentCfg;
+  const mods = getAllowedRealModels();
+  const fallbackId = mods[0]?.id || "gpt-6.2-sol";
+
+  // Ensure each saved model is valid for current user
+  for (const r of AGENT_ROLES) {
+    if (!mods.some(m => m.id === ac.models[r.id])) ac.models[r.id] = fallbackId;
+  }
+
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <strong style="font-size:13px;font-weight:560;">Dây chuyền 4-Agent (Tách sạch ngữ cảnh)</strong>
+      <button class="btn-s tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="autoFillOptimalAgentModels()">Gợi ý tối ưu</button>
+    </div>
+    <div class="agent-cfg-grid">
+      ${AGENT_ROLES.map(r => `
+        <div class="agent-role-row">
+          <input type="checkbox" ${ac.enabledRoles[r.id] ? "checked" : ""} onchange="toggleAgentRole('${r.id}', this.checked)" />
+          <span class="agent-role-lbl">${r.num}. ${r.title}</span>
+          <select class="agent-role-sel" onchange="setAgentModel('${r.id}', this.value)">
+            ${mods.map(m => `<option value="${esc(m.id)}" ${ac.models[r.id]===m.id?"selected":""}>${esc(m.short || m.title)} ${m.cost_label ? `(${m.cost_label})` : ""}</option>`).join("")}
+          </select>
+        </div>`).join("")}
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:2px;">
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);cursor:pointer;">
+        <input type="checkbox" ${ac.pauseAfterArchitect ? "checked" : ""} onchange="S.cfg.agentCfg.pauseAfterArchitect=this.checked;dbPut('kv',S.cfg);haptic('switch')" style="accent-color:var(--accent);width:16px;height:16px;" />
+        <span>Dừng duyệt bản vẽ sau Architect</span>
+      </label>
+      <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);">
+        <span>Tự vá lỗi:</span>
+        <select class="agent-role-sel" style="width:auto;" onchange="S.cfg.agentCfg.maxFixLoops=Number(this.value);dbPut('kv',S.cfg)">
+          <option value="0" ${ac.maxFixLoops===0?"selected":""}>Tắt</option>
+          <option value="1" ${ac.maxFixLoops===1?"selected":""}>Tối đa 1 vòng</option>
+          <option value="2" ${ac.maxFixLoops===2?"selected":""}>Tối đa 2 vòng</option>
+        </select>
+      </div>
+    </div>`;
+}
+
+function toggleAgentRole(roleId, checked) {
+  haptic("switch");
+  S.cfg.agentCfg.enabledRoles[roleId] = Boolean(checked);
+  const anyOn = Object.values(S.cfg.agentCfg.enabledRoles).some(Boolean);
+  if (!anyOn) { S.cfg.agentCfg.enabledRoles.coder = true; showToast("Cần bật ít nhất 1 Agent"); renderAgentConfigPanel(); }
+  dbPut("kv", S.cfg);
+}
+function setAgentModel(roleId, modelId) {
+  haptic("tap");
+  S.cfg.agentCfg.models[roleId] = modelId;
+  dbPut("kv", S.cfg);
+}
+function autoFillOptimalAgentModels() {
+  haptic("ok");
+  const mods = getAllowedRealModels();
+  const pick = prefs => { for (const p of prefs) { const f = mods.find(m => m.id === p || m.mapped === p); if (f) return f.id; } return mods[0]?.id || "gpt-6.2-sol"; };
+  S.cfg.agentCfg.models = {
+    architect: pick(["claude-opus-5-5", "claude-sonnet-5", "gpt-6.2-astra", "gpt-6.2-sol"]),
+    coder: pick(["claude-sonnet-5", "gpt-6.2-sol", "gpt-6.2-astra"]),
+    reviewer: pick(["claude-opus-5-5", "gpt-6.2-astra", "claude-sonnet-5", "gpt-6.2-sol"]),
+    tester: pick(["gpt-6-luna", "gpt-6.2-sol"])
+  };
+  dbPut("kv", S.cfg);
+  renderAgentConfigPanel();
+  showToast("Đã phối model tiết kiệm & mạnh nhất theo gói của bạn");
+}
+
+async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, onToken) {
+  const res = await apiFetch("/ai/chat", {
+    method: "POST",
+    body: {
+      chatId: chat.id,
+      mode: "four_agent",
+      agentRole: roleId,
+      uiModelId: modelId,
+      messages: [
+        { role: "system", content: sysPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      stream: true,
+      pinnedProvider: chat.pinnedProvider,
+      pinnedKeyIndex: chat.pinnedKeyIndex
+    },
+    signal: S.abort.signal
+  });
+  if (!res.ok) {
+    const ej = await res.json().catch(() => ({ error: "HTTP " + res.status }));
+    if (ej.code === "QUOTA_EXCEEDED" && S.user) {
+      if (typeof ej.dailyMsgs === "number") S.user.dailyMsgs = ej.dailyMsgs;
+      if (typeof ej.dailyLimit === "number" && S.user.limits) S.user.limits.daily_msgs = ej.dailyLimit;
+      if (typeof ej.dailyTokens === "number") S.user.dailyTokens = ej.dailyTokens;
+      if (typeof ej.dailyTokenLimit === "number" && S.user.limits) S.user.limits.daily_tokens = ej.dailyTokenLimit;
+      syncAccountUI();
+    }
+    throw new Error(ej.error || `HTTP ${res.status}`);
+  }
+  const hm = res.headers.get("X-Daily-Msgs"), hl = res.headers.get("X-Daily-Limit"), ht = res.headers.get("X-Daily-Tokens"), htl = res.headers.get("X-Daily-Token-Limit");
+  if (S.user) {
+    if (hm !== null) S.user.dailyMsgs = Number(hm);
+    if (hl !== null && S.user.limits) S.user.limits.daily_msgs = Number(hl);
+    if (ht !== null) S.user.dailyTokens = Number(ht);
+    if (htl !== null && S.user.limits) S.user.limits.daily_tokens = Number(htl);
+    syncAccountUI();
+  }
+  const pId = res.headers.get("X-Provider-Id"), kIdx = res.headers.get("X-Key-Index"), slotLbl = res.headers.get("X-Key-Slot");
+  if (pId && kIdx !== null && !chat.pinnedProvider) {
+    chat.pinnedProvider = pId; chat.pinnedKeyIndex = Number(kIdx); chat.pinnedSlotLabel = slotLbl || `${pId} #${Number(kIdx) + 1}`;
+  }
+
+  let acc = "";
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("text/event-stream") && res.body?.getReader) {
+    const reader = res.body.getReader(), dec = new TextDecoder("utf-8");
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n"); buf = lines.pop() || "";
+      for (const l of lines) {
+        const t = l.trim(); if (!t.startsWith("data:")) continue;
+        const d = t.slice(5).trim(); if (d === "[DONE]") continue;
+        try { const delta = JSON.parse(d).choices?.[0]?.delta?.content || ""; if (delta) { acc += delta; onToken(acc); } } catch {}
+      }
+    }
+  } else {
+    const raw = await res.text();
+    try { acc = JSON.parse(raw).choices?.[0]?.message?.content || raw; } catch { acc = raw; }
+    onToken(acc);
+  }
+  return { text: acc, slot: slotLbl || "" };
+}
+
+function extractBestCodeBlock(text) {
+  const htmlM = String(text || "").match(/```html\n([\s\S]*?)```/i);
+  if (htmlM) return { lang: "html", code: htmlM[1] };
+  const anyM = String(text || "").match(/```([\w-]*)\n([\s\S]*?)```/);
+  if (anyM) return { lang: anyM[1] || "text", code: anyM[2] };
+  return null;
+}
+
+async function runFourAgentPipeline(chat, userPrompt, resumeMsg = null) {
+  if (!canUseFourAgent()) {
+    haptic("err");
+    return showToast("Chế độ 4-Agent yêu cầu Key hạng Pro Max trở lên");
+  }
+  const ac = S.cfg.agentCfg;
+  let aiMsg = resumeMsg;
+  if (!aiMsg) {
+    aiMsg = {
+      id: "m-" + (Date.now() + 1), role: "assistant", text: "",
+      modelLabel: "4-Agent Dev Pipeline", streaming: true,
+      pipeline: {
+        prompt: userPrompt,
+        steps: [],
+        awaitingApproval: false,
+        blueprint: "",
+        codeOutput: "",
+        reviewOutput: "",
+        finalCode: null
+      },
+      ts: Date.now()
+    };
+    chat.messages.push(aiMsg);
+  } else {
+    aiMsg.streaming = true;
+    aiMsg.pipeline.awaitingApproval = false;
+  }
+
+  const pipe = aiMsg.pipeline;
+  S.streaming = true; S.abort = new AbortController(); updateOrbButton();
+  renderMessages(); scrollToBottom(true);
+
+  const runStep = async (roleId, numLabel, title, sysPrompt, contentPrompt) => {
+    const modId = ac.models[roleId] || S.cfg.selectedModel;
+    const modObj = S.models.find(m => m.id === modId);
+    const step = {
+      id: "st-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      role: roleId, num: numLabel, title,
+      modelLabel: modObj?.short || modId,
+      status: "running", text: ""
+    };
+    pipe.steps.push(step);
+    renderMessages(); scrollToBottom(false);
+
+    let raf = false;
+    const paintStep = () => {
+      raf = false;
+      const el = document.getElementById("pipe-md-" + step.id);
+      if (el) { el.innerHTML = renderMd(step.text); if (isNearBottom()) scrollToBottom(false); }
+    };
+    const { text, slot } = await callStatelessAgent(chat, modId, roleId, sysPrompt, contentPrompt, full => {
+      step.text = full;
+      if (!raf) { raf = true; requestAnimationFrame(paintStep); }
+    });
+    step.text = text;
+    step.status = "done";
+    if (slot) aiMsg.slot = slot;
+    renderMessages(); scrollToBottom(false);
+    return text;
+  };
+
+  try {
+    // STEP 1: ARCHITECT (only if not resuming from approval)
+    if (!resumeMsg && ac.enabledRoles.architect) {
+      const archSys = "Bạn là Tác tử 1: KIẾN TRÚC SƯ TRƯỞNG (Architect) độc lập. Nhiệm vụ duy nhất: phân tích yêu cầu, thiết kế kiến trúc hệ thống, cấu trúc dữ liệu, luồng xử lý, danh sách module/hàm và edge-cases. KHÔNG viết code dài dòng. Trả lời tiếng Việt ngắn gọn, có cấu trúc rõ ràng.";
+      pipe.blueprint = await runStep("architect", "1", "Architect · Kiến trúc sư trưởng", archSys, `Yêu cầu dự án:\n${pipe.prompt}`);
+
+      if (ac.pauseAfterArchitect && (ac.enabledRoles.coder || ac.enabledRoles.reviewer || ac.enabledRoles.tester)) {
+        pipe.awaitingApproval = true;
+        aiMsg.streaming = false;
+        S.streaming = false; S.abort = null;
+        await apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+        renderMessages(); updateOrbButton();
+        showToast("Architect đã xong · Kiểm tra bản vẽ rồi bấm Duyệt & Chạy tiếp");
+        return;
+      }
+    }
+
+    // STEP 2: CODER
+    if (ac.enabledRoles.coder) {
+      const coderSys = "Bạn là Tác tử 2: LẬP TRÌNH VIÊN (Coder) độc lập. Chỉ tập trung viết mã nguồn sạch, hoàn chỉnh, chạy được ngay bám sát 100% bản thiết kế. Nếu là ứng dụng web/UI, xuất trọn bộ trong 1 khối ```html ... ``` chạy độc lập.";
+      const coderIn = pipe.blueprint
+        ? `YÊU CẦU GỐC:\n${pipe.prompt}\n\nBẢN THIẾT KẾ TỪ ARCHITECT (BẮT BUỘC BÁM SÁT):\n${pipe.blueprint}`
+        : `YÊU CẦU GỐC:\n${pipe.prompt}`;
+      pipe.codeOutput = await runStep("coder", "2", "Coder · Lập trình viên", coderSys, coderIn);
+      pipe.finalCode = extractBestCodeBlock(pipe.codeOutput);
+    }
+
+    // STEP 3: REVIEWER
+    if (ac.enabledRoles.reviewer && pipe.codeOutput) {
+      const revSys = "Bạn là Tác tử 3: THẨM ĐỊNH VIÊN (Reviewer) độc lập. Soi kỹ từng dòng code để tìm lỗi logic tiềm ẩn, lỗ hổng bảo mật, hiệu năng, và sai lệch so với bản vẽ. Liệt kê rõ từng lỗi cần sửa (nếu có) và đánh giá ngắn gọn.";
+      pipe.reviewOutput = await runStep("reviewer", "3", "Reviewer · Thẩm định viên", revSys,
+        `YÊU CẦU:\n${pipe.prompt}\n\nBẢN VẼ:\n${pipe.blueprint || "(không có)"}\n\nMÃ NGUỒN CẦN THẨM ĐỊNH:\n${pipe.codeOutput}`);
+    }
+
+    // STEP 4: TESTER + AUTO-FIX LOOP BACK TO CODER
+    if (ac.enabledRoles.tester && pipe.codeOutput) {
+      const maxLoops = Math.max(0, Math.min(2, Number(ac.maxFixLoops || 0)));
+      for (let loop = 0; loop <= maxLoops; loop++) {
+        const testSys = "Bạn là Tác tử 4: KỸ SƯ KIỂM THỬ (Tester) độc lập. Hãy thiết kế các ca kiểm thử thực tế, edge-case, và mô phỏng chạy kiểm tra mã nguồn (kết hợp báo cáo Reviewer nếu có). Ở DÒNG ĐẦU TIÊN bắt buộc ghi rõ: `STATUS: PASS` nếu mã chạy chuẩn không còn lỗi nghiêm trọng, HOẶC `STATUS: FAIL` kèm danh sách lỗi cụ thể cần Coder sửa ngay.";
+        const testIn = `YÊU CẦU:\n${pipe.prompt}\n\nBÁO CÁO REVIEWER:\n${pipe.reviewOutput || "(không có)"}\n\nMÃ NGUỒN CẦN KIỂM THỬ:\n${pipe.codeOutput}`;
+        const testRes = await runStep("tester", loop === 0 ? "4" : `4.${loop}`, loop === 0 ? "Tester · Kỹ sư kiểm thử" : `Tester · Kiểm thử lại (Vòng ${loop})`, testSys, testIn);
+        const isFail = /STATUS\s*:\s*FAIL/i.test(testRes.slice(0, 260));
+
+        if (isFail && loop < maxLoops && ac.enabledRoles.coder) {
+          pipe.steps[pipe.steps.length - 1].status = "fail";
+          const fixSys = "Bạn là Tác tử 2: LẬP TRÌNH VIÊN (Coder) ở chế độ TỰ VÁ LỖI. Nhận báo cáo lỗi từ Reviewer và Tester, sửa triệt để toàn bộ lỗi và xuất lại trọn bộ mã nguồn hoàn chỉnh (không viết tắt).";
+          pipe.codeOutput = await runStep("coder", `2.${loop + 1}`, `Coder · Tự vá lỗi (Vòng ${loop + 1})`, fixSys,
+            `MÃ CŨ:\n${pipe.codeOutput}\n\nBÁO CÁO REVIEWER:\n${pipe.reviewOutput || ""}\n\nPHẢN HỒI LỖI TỪ TESTER:\n${testRes}`);
+          pipe.finalCode = extractBestCodeBlock(pipe.codeOutput);
+        } else {
+          break;
+        }
+      }
+    }
+
+    aiMsg.text = pipe.codeOutput || pipe.blueprint || "Đã hoàn tất quy trình 4-Agent.";
+    haptic("ok");
+    showToast("Dây chuyền 4-Agent đã hoàn tất");
+  } catch (e) {
+    pipe.steps.push({ id: "st-err-" + Date.now(), role: "error", num: "!", title: "Dừng dây chuyền", modelLabel: "", status: "fail", text: e.name === "AbortError" ? "Đã dừng theo yêu cầu." : e.message });
+    aiMsg.text = `Dây chuyền dừng: ${e.message}`;
+  } finally {
+    aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
+    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+    syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
+  }
+}
+
+async function approveArchitectAndContinue(msgId) {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const msg = chat?.messages.find(m => m.id === msgId);
+  if (!msg?.pipeline) return;
+  const ta = document.getElementById("bp-edit-" + msgId);
+  if (ta) msg.pipeline.blueprint = ta.value.trim();
+  haptic("ok");
+  await runFourAgentPipeline(chat, msg.pipeline.prompt, msg);
+}
+function cancelArchitectGate(msgId) {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const msg = chat?.messages.find(m => m.id === msgId);
+  if (!msg?.pipeline) return;
+  msg.pipeline.awaitingApproval = false;
+  msg.text = msg.pipeline.blueprint;
+  renderMessages();
+  showToast("Đã dừng sau bước Architect");
+}
+function openPipelineCanvas(msgId) {
+  const msg = S.chats.find(c => c.id === S.activeChatId)?.messages.find(m => m.id === msgId);
+  const fc = msg?.pipeline?.finalCode;
+  if (!fc) return showToast("Không tìm thấy khối code trong kết quả");
+  openCanvasCode(fc.code, "4-Agent Output");
+}
+function copyPipelineCode(msgId) {
+  const msg = S.chats.find(c => c.id === S.activeChatId)?.messages.find(m => m.id === msgId);
+  const txt = msg?.pipeline?.finalCode?.code || msg?.pipeline?.codeOutput || msg?.text || "";
+  copyText(txt, "Đã sao chép mã nguồn cuối");
+}
+function openEditImagePromptModal(origPrompt) {
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Chỉnh sửa mô tả tạo ảnh</h3>
+    <textarea id="eip-ta" class="field" rows="4">${esc(origPrompt)}</textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button class="btn-s tap" onclick="closeModal()">Hủy</button>
+      <button class="btn-p tap" onclick="const v=document.getElementById('eip-ta').value.trim();closeModal();if(v){S.activeTool='image';sendPrompt(v);}">Tạo ảnh mới</button>
+    </div>`);
+}
+
 async function sendPrompt(overrideText = null, opts = {}) {
   if (S.streaming) { S.abort?.abort(); return; }
   if (!S.user) return showAuthGate(true);
@@ -782,7 +1275,11 @@ async function sendPrompt(overrideText = null, opts = {}) {
     S.atts = []; renderChips(); renderMessages(); renderChatsList(); scrollToBottom(true);
   }
 
-  if (S.activeTool === "image") return runGenImage(chat, text);
+  if (S.cfg.workMode === "four_agent" && !opts.forceSwitch) {
+    return runFourAgentPipeline(chat, text);
+  }
+  const autoImgPrompt = S.activeTool === "image" ? text : (!sentAtts.length && !opts.forceSwitch ? detectImageIntent(text, chat) : null);
+  if (autoImgPrompt) return runGenImage(chat, autoImgPrompt);
 
   const sysPrompt = buildSystemPrompt(chat, text, sentAtts.some(a => a.dataUrl), opts.handoffSummary || "");
   renderMemoryBar();
@@ -827,6 +1324,7 @@ async function sendPrompt(overrideText = null, opts = {}) {
     if (!res.ok) {
       const ej = await res.json().catch(() => ({ error: "HTTP " + res.status }));
       if (ej.code === "MAINTENANCE") { applySystemMeta({ ...S.system, maintenance: { enabled: true, message: ej.error } }); }
+      if (ej.code === "MUST_CHANGE_PASSWORD") { S.user.mustChangePassword = true; showForcePwdGate(true); }
       if (ej.code === "KEY_REQUIRED") { S.user.licenseActive = false; showKeyGate(true, ej.error); }
       if (ej.code === "QUOTA_EXCEEDED" && S.user) {
         if (typeof ej.dailyMsgs === "number") S.user.dailyMsgs = ej.dailyMsgs;
@@ -916,7 +1414,7 @@ async function runGenImage(chat, prompt) {
     const hm = res.headers.get("X-Daily-Msgs"); if (hm !== null && S.user) { S.user.dailyMsgs = Number(hm); syncAccountUI(); }
     const it = data.data?.[0], src = it?.b64_json ? `data:image/png;base64,${it.b64_json}` : it?.url;
     if (!src) throw new Error("Không nhận được dữ liệu ảnh.");
-    aiMsg.text = `Đã tạo ảnh: **${prompt}**`; aiMsg.genImg = src;
+    aiMsg.text = `Đã tạo ảnh: **${prompt}**`; aiMsg.genImg = src; aiMsg.imagePrompt = prompt;
     await saveLib("media", prompt.slice(0, 32), src); haptic("ok"); showToast("Đã lưu ảnh vào Thư viện");
   } catch (e) { aiMsg.text = `**Không thể tạo ảnh:** ${e.message}`; }
   finally { aiMsg.streaming = false; S.streaming = false; S.activeTool = null; renderChips(); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); renderMessages(); updateOrbButton(); }
@@ -958,6 +1456,54 @@ function renderMessages() {
       const docs = (m.atts || []).filter(a => a.type === "file").map(a => `<span class="cite-pill">${esc(a.name)}</span>`).join("");
       return `<div class="msg-row user">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}</div>`;
     }
+    if (m.pipeline) {
+      const p = m.pipeline;
+      const stepsHtml = (p.steps || []).map((st, idx) => {
+        const isLast = idx === p.steps.length - 1;
+        const stBadge = st.status === "running"
+          ? `<span class="tag-st st-unused">Đang chạy...</span>`
+          : (st.status === "fail" ? `<span class="tag-st st-pending">Phát hiện lỗi</span>` : `<span class="tag-st st-active">Xong</span>`);
+        return `<div class="pipe-card ${st.status}">
+          <button class="pipe-head tap-soft" onclick="toggleAcc('pa-${st.id}','pc-${st.id}')">
+            <span class="pipe-head-l">
+              <span class="pipe-step-num">${esc(st.num)}</span>
+              <span style="font-weight:520;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(st.title)}</span>
+              <span class="tag-quiet nowrap-pill">${esc(st.modelLabel)}</span>
+            </span>
+            <span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
+              ${stBadge}
+              <span id="pc-${st.id}" class="chev ${isLast?"rot":""}"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+            </span>
+          </button>
+          <div id="pa-${st.id}" class="acc-wrap ${isLast?"open":""}">
+            <div class="acc-inner"><div class="pipe-body md" id="pipe-md-${st.id}">${st.text ? renderMd(st.text) : "Đang xử lý..."}</div></div>
+          </div>
+        </div>`;
+      }).join("");
+
+      const gateHtml = p.awaitingApproval ? `<div class="pipe-gate-box">
+        <strong style="font-size:13.5px;">Điểm dừng duyệt bản vẽ (Architect)</strong>
+        <div style="font-size:12px;color:var(--ink-2);">Bạn có thể chỉnh sửa trực tiếp bản thiết kế bên dưới trước khi giao cho Coder → Reviewer → Tester:</div>
+        <textarea id="bp-edit-${m.id}" class="field" rows="6" style="font-size:13px;">${esc(p.blueprint || "")}</textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-p tap" style="flex:1;" onclick="approveArchitectAndContinue('${m.id}')">Duyệt & Chạy tiếp</button>
+          <button class="btn-s tap" onclick="cancelArchitectGate('${m.id}')">Dừng tại đây</button>
+        </div></div>` : "";
+
+      const doneActs = (!m.streaming && !p.awaitingApproval && (p.finalCode || p.codeOutput)) ? `<div class="img-act-row">
+        ${p.finalCode ? `<button class="btn-p tap" style="height:34px;font-size:12.5px;" onclick="openPipelineCanvas('${m.id}')">Mở code trong Canvas</button>` : ""}
+        <button class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="copyPipelineCode('${m.id}')">Sao chép mã cuối</button>
+      </div>` : "";
+
+      return `<div class="msg-row assistant"><div class="pipeline-wrap">
+        <div class="ai-meta-line">
+          <span class="ai-logo-badge"><img class="brand-mark" src="logo-mark.png" alt="" width="15" height="15" /></span>
+          <span class="meta-pill">4-Agent Dev Pipeline</span>
+          ${(S.user?.role === "admin" && m.slot) ? `<span class="meta-pill nowrap-pill">${esc(m.slot)}</span>` : ""}
+        </div>
+        ${stepsHtml}${gateHtml}${doneActs}
+      </div></div>`;
+    }
     if (m.failedSwitch) {
       return `<div class="msg-row assistant"><div class="switch-api-card">
         <div>${esc(m.text)}</div>
@@ -971,11 +1517,15 @@ function renderMessages() {
       <div class="ai-meta-line">
         <span class="ai-logo-badge"><img class="brand-mark" src="logo-mark.png" alt="" width="14" height="14" /></span>
         <span class="meta-pill">${esc(m.modelLabel || "API AI")}</span>
-        ${m.slot ? `<span class="meta-pill">${esc(m.slot)}</span>` : ""}
+        ${(S.user?.role === "admin" && m.slot) ? `<span class="meta-pill nowrap-pill">${esc(m.slot)}</span>` : ""}
       </div>
       ${wavy}<div class="md" id="md-${m.id}">${m.text ? renderMd(m.text) : ""}</div>
       ${m.citedFile ? `<span class="cite-pill">${esc(m.citedFile)}</span>` : ""}
-      ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}')" />` : ""}
+      ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}')" />
+        ${m.imagePrompt ? `<div class="img-act-row">
+          <button class="btn-s tap" style="height:32px;font-size:12px;" onclick="S.activeTool='image';sendPrompt(decodeURIComponent('${encodeURIComponent(m.imagePrompt)}'))">Tạo lại ảnh</button>
+          <button class="btn-s tap" style="height:32px;font-size:12px;" onclick="openEditImagePromptModal(decodeURIComponent('${encodeURIComponent(m.imagePrompt)}'))">Sửa mô tả</button>
+        </div>` : ""}` : ""}
       ${!m.streaming ? `<div class="ai-actions"><div class="ai-act-left">
         <button class="act-icon tap ${m.feedback==="up"?"active-like":""}" onclick="rateMsg('${m.id}','up')" aria-label="Thích"><svg fill="${m.feedback==="up"?"currentColor":"none"}" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>
         <button class="act-icon tap ${m.feedback==="down"?"active-dislike":""}" onclick="rateMsg('${m.id}','down')" aria-label="Không thích"><svg fill="${m.feedback==="down"?"currentColor":"none"}" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button>
@@ -1054,7 +1604,7 @@ function renderAdminBody() {
         </div>
         <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.55;">
           Thời hạn: <b>${esc(d.planLabels?.[k.plan_type] || k.plan_type)}</b> · Max <b class="num">${k.max_devices}</b> máy<br/>
-          Email gắn: <b style="color:#dbeafe;">${esc(k.bound_email || "Chưa kích hoạt")}</b><br/>
+          Email gắn: <b style="color:var(--info-ink);">${esc(k.bound_email || "Chưa kích hoạt")}</b><br/>
           ${k.expires_at ? `Hết hạn: ${new Date(k.expires_at).toLocaleString("vi-VN")}` : `Bắt đầu đếm ${k.duration_days} ngày khi kích hoạt`}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
@@ -1116,6 +1666,7 @@ function renderAdminBody() {
         </div>
 
         <div class="div-line" style="margin:12px 0;"></div>
+        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Chế độ Dây chuyền 4-Agent Lập trình</span><div id="tl-4a" class="sw ${lim.allow_four_agent?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Cài & Cập nhật GitHub Repo vào Skills</span><div id="tl-gh" class="sw ${lim.allow_github_skills?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Gửi ảnh HD 2048px</span><div id="tl-hd" class="sw ${lim.allow_hd_vision?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Tạo hình ảnh</span><div id="tl-img" class="sw ${lim.allow_image_gen?"on":""}"></div></div>
@@ -1148,7 +1699,7 @@ function renderAdminBody() {
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
             <button class="btn-s tap" onclick="adminEditProviderModal(${i})">Sửa & Key Pool</button>
             <button class="btn-blue tap" onclick="adminScanProviderModels('${esc(p.id)}')">Quét Model (/models)</button>
-            ${p.protocol==="openai" ? `<button class="btn-s tap" onclick="adminCheckProviderUsage('${esc(p.id)}')">Số dư</button>` : ""}
+            <button class="btn-s tap" onclick="adminCheckProviderUsage('${esc(p.id)}')">Số dư (?format=text)</button>
             ${provs.length > 1 ? `<button class="btn-danger tap" onclick="adminDeleteProvider(${i})">Xóa</button>` : ""}
           </div>
         </div>`).join("")}
@@ -1179,10 +1730,13 @@ function renderAdminBody() {
       <div class="card-item lg-card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
           <strong>${esc(u.email)}</strong>
-          <span class="tag-st ${u.banned?"st-revoked":(u.role==="admin"?"st-active":"tier-"+u.key_tier)}">${esc(u.banned ? "Bị khóa" : (u.tier_label || u.key_tier))}</span>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            ${u.must_change_password ? `<span class="tag-st st-pending">Chờ đổi MK tạm</span>` : (u.password_changed_at ? `<span class="tag-st st-active">Đã tự đổi MK</span>` : "")}
+            <span class="tag-st ${u.banned?"st-revoked":(u.role==="admin"?"st-active":"tier-"+u.key_tier)}">${esc(u.banned ? "Bị khóa" : (u.tier_label || u.key_tier))}</span>
+          </div>
         </div>
         <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.55;">
-          Key: <code style="font-family:var(--font-mono);color:#bfdbfe;">${esc(u.active_key || "Không có")}</code><br/>
+          Key: <code style="font-family:var(--font-mono);color:var(--accent-ink);">${esc(u.active_key || "Không có")}</code><br/>
           Hết hạn: ${u.key_expires_at ? new Date(u.key_expires_at).toLocaleString("vi-VN") : "—"} · Thiết bị: <b class="num">${u.deviceCount}</b><br/>
           Hôm nay: <b class="num">${u.daily_msg_count}/${u.role==="admin"?"∞":(u.daily_msg_limit ?? "?")}</b> tin · <b class="num">${Math.round((u.daily_token_count||0)/1000)}K/${u.role==="admin"?"∞":Math.round((u.daily_token_limit||0)/1000)+"K"}</b> token
         </div>
@@ -1200,7 +1754,7 @@ function renderAdminBody() {
     box.innerHTML = `<p class="p-sub">Phiếu yêu cầu Quên mật khẩu đã xác thực đúng Email và Key. Bấm Cấp mật khẩu mới rồi tự tay gửi email cho khách.</p>` +
       ((d.resetRequests || []).length ? d.resetRequests.map(r => `<div class="card-item lg-card">
         <div style="display:flex;justify-content:space-between;align-items:center;"><strong>${esc(r.email)}</strong><span class="tag-st ${r.status==="pending"?"st-pending":"st-active"}">${r.status==="pending"?"Chờ cấp MK":"Đã cấp MK"}</span></div>
-        <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;">Key: <code style="font-family:var(--font-mono);color:#bfdbfe;">${esc(r.key_code)}</code><br/>Gửi lúc: ${new Date(r.created_at).toLocaleString("vi-VN")}${r.new_temp_password ? `<br/>Mật khẩu mới: <b style="color:var(--ok);">${esc(r.new_temp_password)}</b>` : ""}</div>
+        <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;">Key: <code style="font-family:var(--font-mono);color:var(--accent-ink);">${esc(r.key_code)}</code><br/>Gửi lúc: ${new Date(r.created_at).toLocaleString("vi-VN")}${r.new_temp_password ? `<br/>Mật khẩu mới: <b style="color:var(--ok-ink);">${esc(r.new_temp_password)}</b>` : ""}</div>
         <div style="display:flex;gap:8px;margin-top:10px;">
           ${r.status === "pending" ? `<button class="btn-p tap" onclick="adminResolveReset('${r.id}','${esc(r.email)}')">Cấp mật khẩu mới</button>` : `<button class="btn-s tap" onclick="openManualMailHandoff('${esc(r.email)}','${esc(r.new_temp_password||"")}')">Mở mẫu gửi mail</button>`}
         </div></div>`).join("") : `<div class="card-item lg-card" style="color:var(--ink-3);">Chưa có phiếu yêu cầu nào.</div>`);
@@ -1281,6 +1835,7 @@ async function adminSaveTier(tier) {
       daily_tokens: Math.max(0, pInt("tl-toks", 35000)),
       max_devices: Math.max(1, pInt("tl-devs", 1)),
       allowed_models: checkedModels,
+      allow_four_agent: document.getElementById("tl-4a").classList.contains("on"),
       allow_github_skills: document.getElementById("tl-gh").classList.contains("on"),
       allow_hd_vision: document.getElementById("tl-hd").classList.contains("on"),
       allow_image_gen: document.getElementById("tl-img").classList.contains("on"),
@@ -1300,8 +1855,10 @@ function adminEditProviderModal(idx) {
     <label class="f-lbl">Base URL (có /v1)</label><input id="ep-url" class="field" value="${esc(p?.base_url||"")}" placeholder="https://api.anthropic.com/v1" />
     <label class="f-lbl">Giao thức API</label>
     <select id="ep-proto" class="field">
-      <option value="openai" ${p?.protocol!=="anthropic"?"selected":""}>OpenAI chuẩn (/chat/completions)</option>
+      <option value="auto" ${(!p || p.protocol==="auto")?"selected":""}>Tự động Fosta (Claude → /messages, GPT → /chat/completions)</option>
+      <option value="openai" ${p?.protocol==="openai"?"selected":""}>OpenAI chuẩn (/chat/completions)</option>
       <option value="anthropic" ${p?.protocol==="anthropic"?"selected":""}>Anthropic chuẩn (/messages · Claude)</option>
+      <option value="responses" ${p?.protocol==="responses"?"selected":""}>OpenAI Responses (/responses · Codex)</option>
     </select>
     <label class="f-lbl">Danh sách API Key (mỗi dòng 1 key)</label>
     <textarea id="ep-keys" class="field" rows="4" style="font-family:var(--font-mono);font-size:12.5px;" placeholder="sk-...">${esc((p?.api_keys||[]).join("\n"))}</textarea>
@@ -1333,7 +1890,7 @@ async function adminDeleteProvider(idx) {
 async function adminCheckProviderUsage(providerId) {
   openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Số dư API Key</h3><div id="pu-out" style="font-size:13px;color:var(--ink-2);">Đang kiểm tra...</div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button class="btn-p tap" onclick="closeModal()">Đóng</button></div>`);
   const r = await apiFetch("/admin/providers/usage", { method: "POST", body: { providerId } }), d = await r.json();
-  document.getElementById("pu-out").innerHTML = (d.keys || []).map(k => `<div class="card-item lg-card"><b>Key #${k.slot}</b> (${esc(k.masked)})<pre style="white-space:pre-wrap;font-size:12px;color:#bfdbfe;margin-top:4px;font-family:var(--font-mono);">${esc(JSON.stringify(k.data || k.error))}</pre></div>`).join("") || "Không có dữ liệu.";
+  document.getElementById("pu-out").innerHTML = (d.keys || []).map(k => `<div class="card-item lg-card"><b>Key #${k.slot}</b> (${esc(k.masked)})<pre style="white-space:pre-wrap;font-size:12px;color:var(--accent-ink);margin-top:6px;line-height:1.5;font-family:var(--font-mono);">${esc(k.text || JSON.stringify(k.data || k.error || ""))}</pre></div>`).join("") || "Không có dữ liệu.";
 }
 
 // Live /v1/models Scanner Modal (4A Đột phá)
@@ -1356,7 +1913,7 @@ async function adminScanProviderModels(providerId) {
         <button class="btn-s tap" onclick="closeModal()">Hủy</button>
         <button class="btn-p tap" onclick="adminCommitScannedModels()">Nhập Model đã chọn</button>
       </div>`;
-  } catch (e) { document.getElementById("scan-out").innerHTML = `<div style="color:#fca5a5;">Lỗi: ${esc(e.message)}</div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button class="btn-p tap" onclick="closeModal()">Đóng</button></div>`; }
+  } catch (e) { document.getElementById("scan-out").innerHTML = `<div style="color:var(--danger-ink);">Lỗi: ${esc(e.message)}</div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button class="btn-p tap" onclick="closeModal()">Đóng</button></div>`; }
 }
 async function adminCommitScannedModels() {
   const sc = window.__scannedModels; if (!sc) return;
@@ -1386,7 +1943,8 @@ function adminAddModelModal() {
     <label class="f-lbl">Nguồn API</label><select id="nm-prov" class="field">${provs.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select>
     <label class="f-lbl">Tên hiển thị</label><input id="nm-title" class="field" placeholder="Claude Opus 5.5" />
     <label class="f-lbl">Model ID thực gửi API</label><input id="nm-map" class="field" placeholder="claude-opus-5-5" />
-    <label class="f-lbl">Mô tả phụ</label><input id="nm-sub" class="field" placeholder="Suy luận đỉnh cao · ×5" />
+    <label class="f-lbl">Mô tả phụ</label><input id="nm-sub" class="field" placeholder="Suy luận đỉnh cao · ×5.2" />
+    <label class="f-lbl">Hệ số nhân token (Fosta gốc + 0.2)</label><input id="nm-mult" type="number" step="0.1" min="0.1" class="field num" value="1.2" />
     <label class="f-lbl">Cấp quyền cho hạng Key</label>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;font-size:13px;">
       ${TIER_OPTIONS.map(([v, l]) => `<label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" class="nm-t" value="${v}" ${v==="ultra"?"checked":""} /> ${l}</label>`).join("")}
@@ -1397,7 +1955,8 @@ async function adminCommitNewModel() {
   const title = document.getElementById("nm-title").value.trim(), mapped = document.getElementById("nm-map").value.trim();
   if (!title || !mapped) return showToast("Nhập đủ Tên và Model ID");
   const id = mapped.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
-  const models = [...(S.adminData.config.models || []), { id, title, short: title.slice(0, 18), sub: document.getElementById("nm-sub").value.trim(), mapped, provider_id: document.getElementById("nm-prov").value, cost_label: "", badge: "Mới", enabled: true }];
+  const mult = Math.max(0.1, Number(document.getElementById("nm-mult")?.value || 1.2) || 1.2);
+  const models = [...(S.adminData.config.models || []), { id, title, short: title.slice(0, 18), sub: document.getElementById("nm-sub").value.trim(), mapped, provider_id: document.getElementById("nm-prov").value, cost_multiplier: mult, cost_label: "×" + mult, badge: "Mới", enabled: true }];
   const tier_limits = JSON.parse(JSON.stringify(S.adminData.config.tier_limits || {}));
   [...document.querySelectorAll(".nm-t:checked")].forEach(c => { if (tier_limits[c.value] && !tier_limits[c.value].allowed_models.includes(id)) tier_limits[c.value].allowed_models.push(id); });
   const r = await apiFetch("/admin/config/save", { method: "POST", body: { models, tier_limits } });
@@ -1435,7 +1994,7 @@ function openManualMailHandoff(email, newPassword) {
   window.__lastMailText = mailText;
   openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:6px;">Đã cấp mật khẩu mới</h3>
     <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px;">Tài khoản <b>${esc(email)}</b> đã đổi sang mật khẩu dưới đây:</p>
-    <div class="lg-card" style="padding:12px;border-radius:14px;text-align:center;font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--ok);margin-bottom:12px;">${esc(newPassword)}</div>
+    <div class="lg-card" style="padding:12px;border-radius:14px;text-align:center;font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--ok-ink);margin-bottom:12px;">${esc(newPassword)}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn-s tap" style="flex:1;" onclick="copyText(window.__lastMailText,'Đã copy mẫu tin nhắn')">Sao chép mẫu gửi</button>
       <a class="btn-p tap" style="flex:1;text-decoration:none;" href="${mailto}">Mở ứng dụng Mail</a>
@@ -1463,15 +2022,37 @@ async function checkAppUpdate(silent = false) {
 }
 
 function setWorkMode(mode, anim = true) {
+  if (mode === "four_agent" && S.user && !canUseFourAgent()) {
+    haptic("err");
+    showToast("Chế độ 4-Agent yêu cầu Key hạng Pro Max trở lên");
+    mode = "chat";
+  }
   S.cfg.workMode = mode; dbPut("kv", S.cfg);
   const tr = document.getElementById("mode-seg"), th = document.getElementById("mode-thumb");
   tr.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
   const act = tr.querySelector(`.seg-btn[data-mode="${mode}"]`);
-  if (act && th) { th.style.width = act.offsetWidth + "px"; th.style.transform = `translate3d(${act.offsetLeft - 3}px,0,0)`; }
+  if (act && th) moveSegThumb(th, act);
+
+  const cfgBtn = document.getElementById("btn-agent-cfg");
+  const cfgAcc = document.getElementById("agent-cfg-acc");
+  if (cfgBtn) cfgBtn.style.display = mode === "four_agent" ? "inline-flex" : "none";
+  if (mode === "four_agent") {
+    renderAgentConfigPanel();
+    if (anim && cfgAcc && !cfgAcc.classList.contains("open")) {
+      cfgAcc.classList.add("open");
+      document.getElementById("chev-ag")?.classList.add("rot");
+    }
+  } else if (cfgAcc) {
+    cfgAcc.classList.remove("open");
+    document.getElementById("chev-ag")?.classList.remove("rot");
+  }
+
   const h = document.getElementById("hero-title");
-  const txt = mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : "Chúng ta nên bắt đầu từ đâu nhỉ?";
+  const txt = mode === "four_agent" ? "Mô tả ứng dụng hoặc tính năng cần 4-Agent xây dựng"
+    : (mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : "Chúng ta nên bắt đầu từ đâu nhỉ?");
   if (anim) { h.style.opacity = "0"; setTimeout(() => { h.textContent = txt; h.style.opacity = "1"; }, 120); } else h.textContent = txt;
-  document.getElementById("prompt-in").placeholder = mode === "task" ? "Mô tả tác vụ" : "Hỏi API AI";
+  document.getElementById("prompt-in").placeholder = mode === "four_agent" ? "Mô tả bài toán cho 4-Agent..."
+    : (mode === "task" ? "Mô tả tác vụ" : "Hỏi API AI");
 }
 
 function handleOrbAction() { const has = document.getElementById("prompt-in").value.trim().length > 0 || S.atts.length > 0; if (S.streaming || has) return sendPrompt(); openLiveVoice(); }
@@ -1497,7 +2078,35 @@ function toggleVoiceDictate() {
   S.rec = r; S.recording = true; btn.classList.add("rec"); r.start();
 }
 
-function toggleSidebar(o) { haptic("tap"); document.getElementById("sidebar").classList.toggle("open", o); document.getElementById("scrim").classList.toggle("open", o); if (!o) closePopovers(); }
+let sidebarX = -320;
+function setSidebarX(sb, scrim, x) {
+  const w = sb.offsetWidth || 304;
+  sidebarX = x;
+  sb.style.transform = `translate3d(${x}px, 0, 0)`;
+  if (scrim && window.innerWidth < 980) {
+    const p = Math.max(0, Math.min(1, 1 + x / w));
+    scrim.style.opacity = String(p);
+  }
+}
+function toggleSidebar(o, initVel = 0) {
+  const sb = document.getElementById("sidebar"), sc = document.getElementById("scrim");
+  if (!sb) return;
+  if (window.innerWidth >= 980) { sb.style.transform = ""; return; }
+  haptic("tap");
+  const w = sb.offsetWidth || 304;
+  const fromX = activeSprings.has(sb) ? activeSprings.get(sb).pos : (sb.classList.contains("open") ? sidebarX : -w - 16);
+  if (o) { sb.classList.add("open"); sc.classList.add("open"); }
+  else closePopovers();
+  runSpring(sb, {
+    from: fromX,
+    to: o ? 0 : -w - 16,
+    velocity: initVel,
+    damping: Math.abs(initVel) > 120 ? 0.86 : 1.0,
+    response: 0.34,
+    onUpdate: x => setSidebarX(sb, sc, x),
+    onDone: () => { if (!o) { sb.classList.remove("open"); sc.classList.remove("open"); sc.style.opacity = ""; } }
+  });
+}
 function closePopovers() { document.querySelectorAll(".popover").forEach(p => p.classList.remove("open")); document.getElementById("btn-model-trigger").classList.remove("open"); }
 function toggleModelDropdown(e) { e.stopPropagation(); haptic("tap"); const d = document.getElementById("model-dropdown"), b = document.getElementById("btn-model-trigger"), o = !d.classList.contains("open"); closePopovers(); d.classList.toggle("open", o); b.classList.toggle("open", o); }
 function toggleChatMore(e) { e.stopPropagation(); haptic("tap"); const p = document.getElementById("chat-more-popover"), o = !p.classList.contains("open"); closePopovers(); p.classList.toggle("open", o); }
@@ -1595,10 +2204,31 @@ async function addMemory() { const ta = document.getElementById("mem-in"), c = t
 async function addQuickMemory(content) { const m = { id: "mem-" + Date.now(), content, enabled: true, ts: Date.now() }; S.memories.unshift(m); await apiFetch("/sync/memories", { method: "POST", body: m }).catch(() => {}); renderMemoryBar(); haptic("ok"); showToast("Đã lưu vào Trí nhớ"); }
 async function delMemory(id) { S.memories = S.memories.filter(x => x.id !== id); await apiFetch("/sync/memories/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {}); renderMemoryBar(); renderMemoriesPage(); }
 
-function openToolsSheet() { haptic("tap"); document.getElementById("sheet-tools-bg").classList.add("open"); document.getElementById("btn-plus").classList.add("rotated"); }
-function closeToolsSheet() { document.getElementById("sheet-tools-bg").classList.remove("open"); document.getElementById("btn-plus").classList.remove("rotated"); }
-function openSettingsSheet() { toggleSidebar(false); syncAccountUI(); document.getElementById("sheet-settings-bg").classList.add("open"); }
-function closeSettingsSheet() { document.getElementById("sheet-settings-bg").classList.remove("open"); }
+const sheetPos = new WeakMap();
+function setSheetY(sheet, y) {
+  sheetPos.set(sheet, y);
+  sheet.style.transform = `translate3d(0, ${y}px, 0)`;
+}
+function animateSheet(bgId, sheetId, open, initVel = 0) {
+  const bg = document.getElementById(bgId), sh = document.getElementById(sheetId);
+  if (!bg || !sh) return;
+  const h = sh.offsetHeight || 420;
+  const cur = sheetPos.has(sh) ? sheetPos.get(sh) : (open ? h : 0);
+  if (open) bg.classList.add("open");
+  runSpring(sh, {
+    from: cur,
+    to: open ? 0 : h + 24,
+    velocity: initVel,
+    damping: Math.abs(initVel) > 120 ? 0.84 : 1.0,
+    response: 0.34,
+    onUpdate: y => setSheetY(sh, y),
+    onDone: () => { if (!open) bg.classList.remove("open"); }
+  });
+}
+function openToolsSheet() { haptic("tap"); document.getElementById("btn-plus").classList.add("rotated"); animateSheet("sheet-tools-bg", "sheet-tools", true); }
+function closeToolsSheet(vel = 0) { document.getElementById("btn-plus").classList.remove("rotated"); animateSheet("sheet-tools-bg", "sheet-tools", false, vel); }
+function openSettingsSheet() { toggleSidebar(false); syncAccountUI(); animateSheet("sheet-settings-bg", "sheet-settings", true); }
+function closeSettingsSheet(vel = 0) { animateSheet("sheet-settings-bg", "sheet-settings", false, vel); }
 function pickTool(t) { haptic("switch"); S.activeTool = S.activeTool === t ? null : t; closeToolsSheet(); renderChips(); }
 function togglePersonal() { haptic("switch"); S.cfg.personalIntel = !S.cfg.personalIntel; dbPut("kv", S.cfg); document.getElementById("sw-personal").classList.toggle("on", S.cfg.personalIntel); renderMemoryBar(); }
 
@@ -1627,24 +2257,116 @@ async function saveCanvasLib() { await saveLib("doc", document.getElementById("c
 
 function bindEvents() {
   const ta = document.getElementById("prompt-in");
-  ta.addEventListener("input", () => { autoGrow(); updateOrbButton(); checkAtTrigger(ta.value); });
-  ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth >= 768) { e.preventDefault(); sendPrompt(); } });
+  let composing = false;
+  ta.addEventListener("compositionstart", () => { composing = true; });
+  ta.addEventListener("compositionend", () => {
+    composing = false;
+    autoGrow(); updateOrbButton(); checkAtTrigger(ta.value);
+  });
+  ta.addEventListener("input", e => {
+    if (composing || e.isComposing) return;
+    autoGrow(); updateOrbButton(); checkAtTrigger(ta.value);
+  });
+  ta.addEventListener("keydown", e => {
+    if (composing || e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" && !e.shiftKey && window.innerWidth >= 768) { e.preventDefault(); sendPrompt(); }
+  });
   document.getElementById("chat-scroll").addEventListener("scroll", () => { document.getElementById("btn-scroll-down").classList.toggle("show", !isNearBottom() && S.activeChatId !== null); }, { passive: true });
   document.addEventListener("click", e => { if (!e.target.closest(".popover") && !e.target.closest("#btn-model-trigger") && !e.target.closest("#btn-chat-more")) closePopovers(); });
   window.addEventListener("resize", () => setWorkMode(S.cfg.workMode, false));
 }
 
 function bindGestures() {
-  document.querySelectorAll("[data-drag]").forEach(h => {
-    const sh = document.getElementById(h.dataset.drag); let sy = 0, dy = 0, dr = false;
-    h.onpointerdown = e => { dr = true; sy = e.clientY; dy = 0; sh.classList.add("dragging"); h.setPointerCapture(e.pointerId); };
-    h.onpointermove = e => { if (!dr) return; dy = Math.max(0, e.clientY - sy); sh.style.transform = `translate3d(0,${dy}px,0)`; };
-    h.onpointerup = () => { if (!dr) return; dr = false; sh.classList.remove("dragging"); sh.style.transform = ""; if (dy > 80) { closeToolsSheet(); closeSettingsSheet(); } };
+  // 1. Interruptible 1:1 Bottom Sheets with Velocity Projection & Rubber-Banding
+  document.querySelectorAll("[data-drag]").forEach(handle => {
+    const sheetId = handle.dataset.drag;
+    const sh = document.getElementById(sheetId);
+    const bgId = sheetId + "-bg";
+    let startY = 0, baseY = 0, dragging = false, samples = [];
+
+    handle.onpointerdown = e => {
+      stopSpring(sh); // Interrupt mid-flight seamlessly!
+      dragging = true;
+      startY = e.clientY;
+      baseY = sheetPos.get(sh) || 0;
+      samples = [{ y: e.clientY, t: performance.now() }];
+      handle.setPointerCapture(e.pointerId);
+    };
+    handle.onpointermove = e => {
+      if (!dragging) return;
+      const raw = baseY + (e.clientY - startY);
+      const h = sh.offsetHeight || 420;
+      // Soft rubber-banding if pulled upward past 0
+      const pos = raw < 0 ? appleRubberband(raw, h * 0.45, 0.55) : raw;
+      setSheetY(sh, pos);
+      const now = performance.now();
+      samples.push({ y: e.clientY, t: now });
+      while (samples.length > 5 && now - samples[0].t > 70) samples.shift();
+    };
+    const finish = () => {
+      if (!dragging) return;
+      dragging = false;
+      const h = sh.offsetHeight || 420;
+      const curY = sheetPos.get(sh) || 0;
+      let vel = 0;
+      if (samples.length >= 2) {
+        const a = samples[0], b = samples[samples.length - 1];
+        const dt = Math.max(8, b.t - a.t);
+        vel = ((b.y - a.y) / dt) * 1000;
+      }
+      const projected = curY + appleProject(vel, 0.994);
+      const shouldClose = projected > h * 0.34 || vel > 650;
+      if (shouldClose) {
+        if (sheetId === "sheet-tools") closeToolsSheet(vel);
+        else closeSettingsSheet(vel);
+      } else {
+        animateSheet(bgId, sheetId, true, vel);
+      }
+    };
+    handle.onpointerup = finish;
+    handle.onpointercancel = finish;
   });
-  const sb = document.getElementById("sidebar"); let sx = 0, dx = 0, sdr = false;
-  sb.addEventListener("pointerdown", e => { if (window.innerWidth >= 980 || !sb.classList.contains("open")) return; sdr = true; sx = e.clientX; dx = 0; sb.classList.add("dragging"); }, { passive: true });
-  sb.addEventListener("pointermove", e => { if (!sdr) return; dx = Math.min(0, e.clientX - sx); sb.style.transform = `translate3d(${dx}px,0,0)`; }, { passive: true });
-  sb.addEventListener("pointerup", () => { if (!sdr) return; sdr = false; sb.classList.remove("dragging"); sb.style.transform = ""; if (dx < -70) toggleSidebar(false); });
+
+  // 2. Interruptible 1:1 Sidebar Swipe with Velocity Projection & Live Scrim
+  const sb = document.getElementById("sidebar"), sc = document.getElementById("scrim");
+  let sx = 0, sy = 0, baseX = 0, sdr = false, decided = false, sSamples = [];
+  sb.addEventListener("pointerdown", e => {
+    if (window.innerWidth >= 980 || !sb.classList.contains("open")) return;
+    stopSpring(sb);
+    sdr = true; decided = false; sx = e.clientX; sy = e.clientY; baseX = sidebarX;
+    sSamples = [{ x: e.clientX, t: performance.now() }];
+  }, { passive: true });
+  sb.addEventListener("pointermove", e => {
+    if (!sdr) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!decided) {
+      if (Math.hypot(dx, dy) < 10) return; // 10px gesture hysteresis (Apple Design §10)
+      if (Math.abs(dy) > Math.abs(dx)) { sdr = false; return; }
+      decided = true;
+    }
+    const w = sb.offsetWidth || 304;
+    const raw = baseX + dx;
+    const pos = raw > 0 ? appleRubberband(raw, w * 0.3, 0.55) : Math.max(-w, raw);
+    setSidebarX(sb, sc, pos);
+    const now = performance.now();
+    sSamples.push({ x: e.clientX, t: now });
+    while (sSamples.length > 5 && now - sSamples[0].t > 70) sSamples.shift();
+  }, { passive: true });
+  const finishSb = () => {
+    if (!sdr) return;
+    sdr = false;
+    if (!decided) return;
+    const w = sb.offsetWidth || 304;
+    let vel = 0;
+    if (sSamples.length >= 2) {
+      const a = sSamples[0], b = sSamples[sSamples.length - 1];
+      vel = ((b.x - a.x) / Math.max(8, b.t - a.t)) * 1000;
+    }
+    const projected = sidebarX + appleProject(vel, 0.994);
+    toggleSidebar(!(projected < -w * 0.36 || vel < -600), vel);
+  };
+  sb.addEventListener("pointerup", finishSb);
+  sb.addEventListener("pointercancel", finishSb);
 }
 
 function isNearBottom() { const sc = document.getElementById("chat-scroll"); return sc.scrollHeight - sc.scrollTop - sc.clientHeight < 120; }
