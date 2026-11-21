@@ -1,4 +1,4 @@
-name: Build & Release Android APK (Chat GPT)
+name: Build & Release Android APK (API AI)
 
 on:
   push:
@@ -79,10 +79,8 @@ jobs:
               convert www/logo.png -resize "${FG}x${FG}" "$DIR/ic_launcher_foreground.png"
             done
             mkdir -p android/app/src/main/res/values
-            printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#05070e</color>\n</resources>\n' > android/app/src/main/res/values/ic_launcher_background.xml
+            printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#07080c</color>\n</resources>\n' > android/app/src/main/res/values/ic_launcher_background.xml
             echo "Da thay Icon App Android thanh cong."
-          else
-            echo "Khong tim thay www/logo.png, giu icon mac dinh."
           fi
 
       - name: Chuẩn bị Keystore ký cố định
@@ -105,11 +103,10 @@ jobs:
             echo "generated=false" >> "$GITHUB_OUTPUT"
             echo "Da nap Keystore co dinh tu GitHub Secrets."
           else
-            echo "Chua co Secret ANDROID_KEYSTORE_BASE64 -> tu tao Keystore moi."
             keytool -genkey -v -keystore android/app/release.jks \
               -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass "$PASS" -keypass "$KPASS" \
-              -dname "CN=ChatGPT, OU=App, O=BangDev, L=HungYen, S=VN, C=VN"
+              -dname "CN=APIAI, OU=App, O=BangDev, L=HungYen, S=VN, C=VN"
             mkdir -p keystore-export
             base64 -w 0 android/app/release.jks > keystore-export/ANDROID_KEYSTORE_BASE64.txt
             echo "generated=true" >> "$GITHUB_OUTPUT"
@@ -148,7 +145,7 @@ jobs:
           if (!styles.includes("statusBarColor")) {
             styles = styles.replace(
               "</style>",
-              '    <item name="android:statusBarColor">#05070e</item>\n        <item name="android:navigationBarColor">#05070e</item>\n        <item name="android:windowBackground">#05070e</item>\n    </style>'
+              '    <item name="android:statusBarColor">#07080c</item>\n        <item name="android:navigationBarColor">#07080c</item>\n        <item name="android:windowBackground">#07080c</item>\n    </style>'
             );
             fs.writeFileSync(sPath, styles);
           }
@@ -180,13 +177,13 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk ../ChatGPT-v2.0.${{ github.run_number }}.apk
+          cp app/build/outputs/apk/release/app-release.apk ../API-AI-v2.0.${{ github.run_number }}.apk
 
       - name: Xuất Artifact APK
         uses: actions/upload-artifact@v4
         with:
-          name: ChatGPT-v2.0.${{ github.run_number }}-APK
-          path: ChatGPT-v2.0.${{ github.run_number }}.apk
+          name: API-AI-v2.0.${{ github.run_number }}-APK
+          path: API-AI-v2.0.${{ github.run_number }}.apk
           retention-days: 30
 
       - name: Xuất file Keystore Base64 lần đầu
@@ -201,8 +198,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0.${{ github.run_number }}
-          name: Chat GPT v2.0.${{ github.run_number }}
+          name: API AI v2.0.${{ github.run_number }}
           body: |
-            Bản cập nhật Chat GPT v2.0.${{ github.run_number }} (Build #${{ github.run_number }}).
+            Bản cập nhật API AI v2.0.${{ github.run_number }} (Build #${{ github.run_number }}).
             Tải file APK bên dưới và bấm Cập nhật trực tiếp không cần gỡ bản cũ.
-          files: ChatGPT-v2.0.${{ github.run_number }}.apk
+          files: API-AI-v2.0.${{ github.run_number }}.apk
