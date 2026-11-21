@@ -348,7 +348,7 @@
             <button type="button" id="btn-plus" class="plus-btn tap" onclick="openToolsSheet()" aria-label="Công cụ và đính kèm">
               <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
             </button>
-            <textarea id="prompt-in" rows="1" placeholder="Hỏi API AI" autocomplete="on" autocorrect="on" spellcheck="false"></textarea>
+            <textarea id="prompt-in" rows="1" placeholder="Hỏi API AI" autocomplete="on" autocorrect="on" autocapitalize="sentences" spellcheck="true" inputmode="text"></textarea>
             <button type="button" id="btn-mic" class="mic-btn tap" onclick="toggleVoiceDictate()" aria-label="Nhập giọng nói">
               <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
             </button>
@@ -368,7 +368,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;">
           <div>
             <h2 class="p-title" style="margin:0;">Quản trị Admin</h2>
-            <div style="font-size:12.5px;color:var(--ink-3);">Key 4 hạng · Email · Nguồn API · Model · Thông báo</div>
+            <div style="font-size:12.5px;color:var(--ink-3);">Key 4 hạng · Email · Nguồn API · Model · <span id="admin-worker-ver" class="num">Worker</span></div>
           </div>
           <div style="display:flex;gap:6px;">
             <button type="button" class="btn-s tap" onclick="loadAdminData()">Tải lại</button>
@@ -516,6 +516,7 @@
         <div id="set-expiry" style="color:var(--ink-2);margin-top:4px;font-size:12px;"></div>
         <div id="set-usage" class="num" style="color:var(--accent-ink);margin-top:3px;font-size:12px;"></div>
       </div>
+      <button type="button" class="s-row tap-soft" onclick="closeSettingsSheet(); openUserTokenBalanceModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Số dư Token của bạn</span></span><span style="color:var(--ink-3);">›</span></button>
       <button type="button" class="s-row tap-soft" onclick="closeSettingsSheet(); openAppearanceModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2m10-10h-2M4 12H2"/></svg><span>Giao diện và hiệu năng</span></span><span style="color:var(--ink-3);">›</span></button>
       <button type="button" class="s-row tap-soft" onclick="closeSettingsSheet(); checkAppUpdate(false)"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg><span>Kiểm tra cập nhật (v__APP_VERSION_NAME__)</span></span><span style="color:var(--ink-3);">›</span></button>
       <button type="button" id="set-server-row" class="s-row tap-soft" style="display:none;" onclick="closeSettingsSheet(); openServerUrlModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg><span>Địa chỉ Server Cloudflare</span></span><span style="color:var(--ink-3);">›</span></button>
@@ -567,7 +568,7 @@
 </div>
 
 <div id="toast" class="lg-float" role="status" aria-live="polite">
-  <span class="toast-dot"><svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+  <span id="toast-dot" class="toast-dot"><svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
   <span id="toast-msg">Đã lưu</span>
 </div>
 
