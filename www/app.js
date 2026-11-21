@@ -1,10 +1,11 @@
-/* API AI v3.1 Craft — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
+/* API AI v3.2 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
-  { id: "low", title: "Thấp", sub: "Nhanh và gọn", prompt: "Trả lời ngắn gọn, trực diện." },
-  { id: "medium", title: "Trung bình", sub: "Độ sâu cân bằng", prompt: "Phân tích cân bằng, rõ ràng." },
-  { id: "high", title: "Cao", sub: "Suy luận sâu", prompt: "Suy luận kỹ từng bước, kiểm tra kỹ chi tiết." }
+  { id: "low", title: "Thấp", sub: "Phản hồi nhanh · reasoning: low", prompt: "Trả lời ngắn gọn, trực diện, không lan man." },
+  { id: "medium", title: "Trung bình", sub: "Cân bằng · reasoning: medium", prompt: "Phân tích cân bằng, rõ ràng từng ý chính." },
+  { id: "high", title: "Cao", sub: "Suy luận sâu · reasoning: high", prompt: "Suy luận sâu từng bước, tự kiểm tra kỹ logic trước khi kết luận." },
+  { id: "xhigh", title: "xHigh", sub: "Tư duy tối đa · reasoning: xhigh", prompt: "Tư duy chuyên sâu ở mức tối đa: phân tích đa chiều, rà soát mọi edge-case và kiểm chứng cẩn mật trước khi đưa ra đáp án cuối." }
 ];
 const PLAN_OPTIONS = [
   ["week", "Tuần (7 ngày)"], ["1m", "1 Tháng (30 ngày)"], ["3m", "3 Tháng (90 ngày)"],
@@ -456,12 +457,14 @@ function syncAccountUI() {
   sp.textContent = u.planLabel || "Chưa kích hoạt";
   sp.className = `tag-st ${isAdmin ? "st-active" : ("tier-" + (u.keyTier || "classic"))}`;
   document.getElementById("set-expiry").textContent = u.expiresAt ? `Hết hạn: ${new Date(u.expiresAt).toLocaleString("vi-VN")}` : (isAdmin ? "Quyền Quản trị viên" : "Chưa kích hoạt");
+  const isUnlimMsgs = isAdmin || Boolean(u.limits?.unlimited_msgs) || Number(u.limits?.daily_msgs) < 0;
+  const remTok = Math.max(0, (u.limits?.daily_tokens || 0) - (u.dailyTokens || 0));
   document.getElementById("set-usage").textContent = isAdmin
     ? "Không giới hạn lượt và model"
-    : `Hôm nay: ${u.dailyMsgs}/${u.limits?.daily_msgs ?? 0} tin · ${Math.round((u.dailyTokens || 0) / 1000)}K/${Math.round((u.limits?.daily_tokens || 0) / 1000)}K token`;
+    : `Hôm nay: ${u.dailyMsgs}/${isUnlimMsgs ? "Vô hạn" : (u.limits?.daily_msgs ?? 0)} tin · Còn ${remTok.toLocaleString("vi-VN")} token`;
   document.getElementById("hero-quota-txt").textContent = isAdmin
     ? "Admin · Toàn quyền API AI"
-    : `${u.planLabel} · Còn ${Math.max(0, (u.limits?.daily_msgs ?? 0) - u.dailyMsgs)} lượt hôm nay`;
+    : `${u.planLabel || "API AI"}`;
 
   // STRICT VISIBILITY: Only Admin sees Admin Panel & Server URL row!
   document.getElementById("btn-open-admin").style.display = isAdmin ? "flex" : "none";
@@ -887,7 +890,7 @@ async function switchChatApiWithSummary(failedMsgId) {
    SMART IMAGE INTENT DETECTOR (2A) + 4-AGENT DEV PIPELINE (1A + 1B + 1C + USER MODELS)
    ========================================================================= */
 function canUseFourAgent() {
-  return S.user?.role === "admin" || Boolean(S.user?.limits?.allow_four_agent);
+  return S.user?.role === "admin" || ["pro_max", "ultra"].includes(S.user?.keyTier);
 }
 
 function detectImageIntent(text, chat) {
@@ -1004,6 +1007,7 @@ async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, 
       mode: "four_agent",
       agentRole: roleId,
       uiModelId: modelId,
+      thinkingLevel: S.cfg.thinkingLevel || "high",
       messages: [
         { role: "system", content: sysPrompt },
         { role: "user", content: userPrompt }
@@ -1240,8 +1244,9 @@ async function sendPrompt(overrideText = null, opts = {}) {
   if (S.streaming) { S.abort?.abort(); return; }
   if (!S.user) return showAuthGate(true);
   if (!S.user.licenseActive && S.user.role !== "admin") return showKeyGate(true);
-  if (S.user.role !== "admin" && S.user.limits && S.user.dailyMsgs >= S.user.limits.daily_msgs) {
-    haptic("err"); return showToast(`Đã hết giới hạn ${S.user.limits.daily_msgs} tin nhắn/ngày`);
+  const isUnlimMsgs = Boolean(S.user.limits?.unlimited_msgs) || Number(S.user.limits?.daily_msgs) < 0;
+  if (S.user.role !== "admin" && S.user.limits && !isUnlimMsgs && S.user.dailyMsgs >= S.user.limits.daily_msgs) {
+    haptic("err"); return showToast(`Đã hết giới hạn ${S.user.limits.daily_msgs} tin nhắn/ngày`, "err");
   }
 
   const input = document.getElementById("prompt-in");
@@ -1285,8 +1290,8 @@ async function sendPrompt(overrideText = null, opts = {}) {
   renderMemoryBar();
   const chosenUi = S.models.find(m => m.id === S.cfg.selectedModel) || S.models.find(x => x.allowed) || S.models[0];
   const aiMsg = {
-    id: "m-" + (Date.now() + 1), role: "assistant", text: "",
-    modelLabel: `${chosenUi.short || chosenUi.title} ${THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel)?.title}`,
+    id: "m-" + (Date.now() + 1), role: "assistant", text: "", thinking: "", thinkingLevel: S.cfg.thinkingLevel || "high", thinkMs: 0,
+    modelLabel: `${chosenUi.short || chosenUi.title} · ${THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel)?.title || "Cao"}`,
     slot: "", citedFile: sentAtts[0]?.name || "", feedback: null, streaming: true, failedSwitch: false, canSwitch: false, ts: Date.now()
   };
   chat.messages.push(aiMsg); renderMessages(); scrollToBottom(true);
@@ -1311,6 +1316,7 @@ async function sendPrompt(overrideText = null, opts = {}) {
       body: {
         chatId: chat.id,
         uiModelId: chosenUi.id,
+        thinkingLevel: S.cfg.thinkingLevel || "high",
         tool: S.activeTool,
         messages: msgs,
         stream: true,
@@ -1361,13 +1367,43 @@ async function sendPrompt(overrideText = null, opts = {}) {
     aiMsg.slot = slotLbl || "";
     const um = res.headers.get("X-Used-Model"); if (um) aiMsg.modelLabel += ` · ${um}`;
 
+    const thinkStart = Date.now();
+    const appliedThink = res.headers.get("X-Thinking-Level");
+    if (appliedThink) aiMsg.thinkingLevel = appliedThink;
+
+    const extractInlineThinkTags = () => {
+      if (!aiMsg.text.includes("<think>")) return;
+      const m = aiMsg.text.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
+      if (m) {
+        aiMsg.thinking = m[1].trim();
+        if (aiMsg.text.includes("</think>")) {
+          aiMsg.text = aiMsg.text.replace(/<think>[\s\S]*?<\/think>/i, "").trimStart();
+        } else {
+          aiMsg.text = "";
+        }
+      }
+    };
+
     const ct = (res.headers.get("content-type") || "").toLowerCase();
     if (ct.includes("text/event-stream") && res.body?.getReader) {
       const reader = res.body.getReader(), dec = new TextDecoder("utf-8");
-      let buf = "", raf = false;
+      let buf = "", raf = false, rawContentAcc = "";
       const paint = () => {
-        raf = false; const el = document.getElementById("md-" + aiMsg.id);
-        if (el) { const ld = el.previousElementSibling; if (ld?.classList.contains("wavy-box")) ld.remove(); el.innerHTML = renderMd(aiMsg.text); if (isNearBottom()) scrollToBottom(false); }
+        raf = false;
+        const tb = document.getElementById("th-" + aiMsg.id);
+        const thBox = document.getElementById("thb-" + aiMsg.id);
+        if (aiMsg.thinking) {
+          if (thBox) thBox.style.display = "block";
+          if (tb) tb.textContent = aiMsg.thinking;
+          const tLbl = document.getElementById("thl-" + aiMsg.id);
+          if (tLbl) tLbl.textContent = aiMsg.text ? `Đã tư duy (${Math.max(1, Math.round(aiMsg.thinkMs / 1000))}s)` : `Đang tư duy (${Math.max(1, Math.round((Date.now() - thinkStart) / 1000))}s)...`;
+        }
+        const el = document.getElementById("md-" + aiMsg.id);
+        if (el && aiMsg.text) {
+          const ld = document.getElementById("wv-" + aiMsg.id); if (ld) ld.remove();
+          el.innerHTML = renderMd(aiMsg.text);
+        }
+        if (isNearBottom()) scrollToBottom(false);
       };
       while (true) {
         const { done, value } = await reader.read(); if (done) break;
@@ -1376,15 +1412,50 @@ async function sendPrompt(overrideText = null, opts = {}) {
         for (const l of lines) {
           const t = l.trim(); if (!t.startsWith("data:")) continue;
           const d = t.slice(5).trim(); if (d === "[DONE]") continue;
-          try { const delta = JSON.parse(d).choices?.[0]?.delta?.content || ""; if (delta) { aiMsg.text += delta; if (!raf) { raf = true; requestAnimationFrame(paint); } } } catch {}
+          try {
+            const parsed = JSON.parse(d);
+            const ch = parsed.choices?.[0]?.delta || {};
+            const rDelta = ch.reasoning_content || ch.reasoning || "";
+            const cDelta = ch.content || "";
+            if (rDelta) {
+              aiMsg.thinking += rDelta;
+              aiMsg.thinkMs = Date.now() - thinkStart;
+              if (!raf) { raf = true; requestAnimationFrame(paint); }
+            }
+            if (cDelta) {
+              if (!aiMsg.text && aiMsg.thinking && !aiMsg.thinkMs) aiMsg.thinkMs = Date.now() - thinkStart;
+              rawContentAcc += cDelta;
+              aiMsg.text = rawContentAcc;
+              extractInlineThinkTags();
+              if (!raf) { raf = true; requestAnimationFrame(paint); }
+            }
+          } catch {}
         }
       }
+      if (aiMsg.thinking && !aiMsg.thinkMs) aiMsg.thinkMs = Date.now() - thinkStart;
       paint();
     } else {
       const raw = await res.text();
       if (raw.includes("data:")) {
-        for (const l of raw.split("\n")) { const t = l.trim(); if (!t.startsWith("data:")) continue; const d = t.slice(5).trim(); if (d === "[DONE]") continue; try { aiMsg.text += JSON.parse(d).choices?.[0]?.delta?.content || ""; } catch {} }
-      } else { try { const j = JSON.parse(raw); aiMsg.text = j.choices?.[0]?.message?.content || j.error?.message || "Không có phản hồi."; } catch { aiMsg.text = raw || "Không có phản hồi."; } }
+        for (const l of raw.split("\n")) {
+          const t = l.trim(); if (!t.startsWith("data:")) continue;
+          const d = t.slice(5).trim(); if (d === "[DONE]") continue;
+          try {
+            const ch = JSON.parse(d).choices?.[0]?.delta || {};
+            if (ch.reasoning_content || ch.reasoning) aiMsg.thinking += (ch.reasoning_content || ch.reasoning);
+            if (ch.content) aiMsg.text += ch.content;
+          } catch {}
+        }
+      } else {
+        try {
+          const j = JSON.parse(raw);
+          const msgObj = j.choices?.[0]?.message || {};
+          aiMsg.thinking = msgObj.reasoning_content || msgObj.reasoning || "";
+          aiMsg.text = msgObj.content || j.error?.message || "Không có phản hồi.";
+        } catch { aiMsg.text = raw || "Không có phản hồi."; }
+      }
+      extractInlineThinkTags();
+      if (aiMsg.thinking) aiMsg.thinkMs = Date.now() - thinkStart;
     }
     if (S.activeTool === "canvas") { const m = aiMsg.text.match(/```html\n([\s\S]*?)```/i); if (m) openCanvasCode(m[1], chat.title); }
     if (S.liveMode && aiMsg.text) speakLiveReply(aiMsg.text);
@@ -1512,14 +1583,30 @@ function renderMessages() {
           <button class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="startNewChat()">Mở đoạn chat mới</button>
         </div></div></div>`;
     }
-    const wavy = m.streaming && !m.text ? `<div class="wavy-box"><svg class="wavy-svg" viewBox="0 0 104 16"><path class="wavy-path" d="M0 8 Q6.5 1 13 8 T26 8 T39 8 T52 8 T65 8 T78 8 T91 8 T104 8"/></svg><span>Đang suy luận...</span></div>` : "";
+    const thSec = m.thinkMs ? Math.max(1, Math.round(m.thinkMs / 1000)) : 0;
+    const thTitle = m.streaming && !m.text ? "Đang tư duy..." : (thSec ? `Đã tư duy (${thSec}s)` : "Quá trình tư duy");
+    const showTh = Boolean(m.thinking);
+    const thOpen = m.streaming && !m.text && showTh;
+    const thinkBlock = `<div id="thb-${m.id}" class="think-box" style="display:${showTh ? "block" : "none"};">
+      <button type="button" class="think-head tap-soft" onclick="toggleAcc('tha-${m.id}','thc-${m.id}')">
+        <span class="think-head-l">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>
+          <span id="thl-${m.id}">${esc(thTitle)}</span>
+        </span>
+        <span id="thc-${m.id}" class="chev ${thOpen ? "rot" : ""}"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </button>
+      <div id="tha-${m.id}" class="acc-wrap ${thOpen ? "open" : ""}">
+        <div class="acc-inner"><div id="th-${m.id}" class="think-body">${esc(m.thinking || "")}</div></div>
+      </div>
+    </div>`;
+    const wavy = m.streaming && !m.text ? `<div id="wv-${m.id}" class="wavy-box"><svg class="wavy-svg" viewBox="0 0 104 16"><path class="wavy-path" d="M0 8 Q6.5 1 13 8 T26 8 T39 8 T52 8 T65 8 T78 8 T91 8 T104 8"/></svg><span>Đang suy luận (${esc(THINK_LEVELS.find(x => x.id === (m.thinkingLevel || S.cfg.thinkingLevel))?.title || "Cao")})...</span></div>` : "";
     return `<div class="msg-row assistant"><div class="ai-block">
       <div class="ai-meta-line">
         <span class="ai-logo-badge"><img class="brand-mark" src="logo-mark.png" alt="" width="14" height="14" /></span>
         <span class="meta-pill">${esc(m.modelLabel || "API AI")}</span>
         ${(S.user?.role === "admin" && m.slot) ? `<span class="meta-pill nowrap-pill">${esc(m.slot)}</span>` : ""}
       </div>
-      ${wavy}<div class="md" id="md-${m.id}">${m.text ? renderMd(m.text) : ""}</div>
+      ${thinkBlock}${wavy}<div class="md" id="md-${m.id}">${m.text ? renderMd(m.text) : ""}</div>
       ${m.citedFile ? `<span class="cite-pill">${esc(m.citedFile)}</span>` : ""}
       ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}')" />
         ${m.imagePrompt ? `<div class="img-act-row">
@@ -1566,6 +1653,14 @@ async function loadAdminData(silent = false) {
     pill.style.display = pCnt ? "inline-block" : "none"; pill.textContent = String(pCnt);
     dot.classList.toggle("show", pCnt > 0); dot.textContent = String(pCnt);
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
+    const wv = document.getElementById("admin-worker-ver");
+    if (wv) {
+      if (data.backendVersion === "3.2") {
+        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.2</span>`;
+      } else {
+        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.2)</span>`;
+      }
+    }
     if (!silent) renderAdminBody();
   } catch (e) { if (!silent) showToast(e.message); }
 }
@@ -1647,7 +1742,16 @@ function renderAdminBody() {
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div><label class="f-lbl">Tin nhắn tối đa / ngày</label><input id="tl-msgs" type="number" class="field num" value="${lim.daily_msgs ?? 25}" /></div>
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 4px 2px;">
+              <label class="f-lbl" style="margin:0;">Tin nhắn / ngày</label>
+              <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--accent-ink);cursor:pointer;">
+                <input id="tl-unlim" type="checkbox" ${(lim.unlimited_msgs || Number(lim.daily_msgs) < 0) ? "checked" : ""} onchange="const ip=document.getElementById('tl-msgs');ip.disabled=this.checked;ip.value=this.checked?'':'500';ip.placeholder=this.checked?'Vô hạn':'Số tin/ngày';" style="width:15px;height:15px;accent-color:var(--accent);" />
+                <span>Vô hạn</span>
+              </label>
+            </div>
+            <input id="tl-msgs" type="number" class="field num" ${(lim.unlimited_msgs || Number(lim.daily_msgs) < 0) ? 'disabled placeholder="Vô hạn" value=""' : `value="${lim.daily_msgs ?? 25}" placeholder="Số tin/ngày"`} />
+          </div>
           <div><label class="f-lbl">Ngân sách Token / ngày</label><input id="tl-toks" type="number" class="field num" value="${lim.daily_tokens ?? 35000}" /></div>
         </div>
         <label class="f-lbl">Số thiết bị tối đa</label>
@@ -1666,7 +1770,7 @@ function renderAdminBody() {
         </div>
 
         <div class="div-line" style="margin:12px 0;"></div>
-        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Chế độ Dây chuyền 4-Agent Lập trình</span><div id="tl-4a" class="sw ${lim.allow_four_agent?"on":""}"></div></div>
+        <div class="s-row" style="cursor:default;"><span>Chế độ Dây chuyền 4-Agent Lập trình</span><span class="tag-st ${(t==="pro_max"||t==="ultra")?"st-active":"st-revoked"}">${(t==="pro_max"||t==="ultra")?"Cố định mở (Pro Max+)":"Cố định khóa"}</span></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Cài & Cập nhật GitHub Repo vào Skills</span><div id="tl-gh" class="sw ${lim.allow_github_skills?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Gửi ảnh HD 2048px</span><div id="tl-hd" class="sw ${lim.allow_hd_vision?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Tạo hình ảnh</span><div id="tl-img" class="sw ${lim.allow_image_gen?"on":""}"></div></div>
@@ -1699,7 +1803,7 @@ function renderAdminBody() {
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
             <button class="btn-s tap" onclick="adminEditProviderModal(${i})">Sửa & Key Pool</button>
             <button class="btn-blue tap" onclick="adminScanProviderModels('${esc(p.id)}')">Quét Model (/models)</button>
-            <button class="btn-s tap" onclick="adminCheckProviderUsage('${esc(p.id)}')">Số dư (?format=text)</button>
+            <button class="btn-s tap" onclick="adminCheckProviderUsage('${esc(p.id)}')">Xem số dư Token</button>
             ${provs.length > 1 ? `<button class="btn-danger tap" onclick="adminDeleteProvider(${i})">Xóa</button>` : ""}
           </div>
         </div>`).join("")}
@@ -1738,7 +1842,7 @@ function renderAdminBody() {
         <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.55;">
           Key: <code style="font-family:var(--font-mono);color:var(--accent-ink);">${esc(u.active_key || "Không có")}</code><br/>
           Hết hạn: ${u.key_expires_at ? new Date(u.key_expires_at).toLocaleString("vi-VN") : "—"} · Thiết bị: <b class="num">${u.deviceCount}</b><br/>
-          Hôm nay: <b class="num">${u.daily_msg_count}/${u.role==="admin"?"∞":(u.daily_msg_limit ?? "?")}</b> tin · <b class="num">${Math.round((u.daily_token_count||0)/1000)}K/${u.role==="admin"?"∞":Math.round((u.daily_token_limit||0)/1000)+"K"}</b> token
+          Hôm nay: <b class="num">${u.daily_msg_count}/${(u.role==="admin" || Number(u.daily_msg_limit) < 0) ? "Vô hạn" : (u.daily_msg_limit ?? "?")}</b> tin · <b class="num">${Math.round((u.daily_token_count||0)/1000)}K/${u.role==="admin"?"∞":Math.round((u.daily_token_limit||0)/1000)+"K"}</b> token
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
           <button class="btn-blue tap" onclick="adminPromptChangePass('${esc(u.email)}')">Đổi mật khẩu</button>
@@ -1829,13 +1933,15 @@ async function adminSaveLockedVis(val) {
 async function adminSaveTier(tier) {
   const pInt = (id, fb) => { const n = parseInt(document.getElementById(id).value, 10); return Number.isFinite(n) ? n : fb; };
   const checkedModels = [...document.querySelectorAll("#tl-models-box input[type='checkbox']:checked")].map(x => x.value);
+  const unlim = document.getElementById("tl-unlim")?.checked || false;
   const tier_limits = {
     [tier]: {
-      daily_msgs: Math.max(0, pInt("tl-msgs", 25)),
+      daily_msgs: unlim ? -1 : Math.max(0, pInt("tl-msgs", 25)),
+      unlimited_msgs: unlim,
       daily_tokens: Math.max(0, pInt("tl-toks", 35000)),
       max_devices: Math.max(1, pInt("tl-devs", 1)),
       allowed_models: checkedModels,
-      allow_four_agent: document.getElementById("tl-4a").classList.contains("on"),
+      allow_four_agent: (tier === "pro_max" || tier === "ultra"),
       allow_github_skills: document.getElementById("tl-gh").classList.contains("on"),
       allow_hd_vision: document.getElementById("tl-hd").classList.contains("on"),
       allow_image_gen: document.getElementById("tl-img").classList.contains("on"),
@@ -1844,7 +1950,7 @@ async function adminSaveTier(tier) {
     }
   };
   const r = await apiFetch("/admin/config/save", { method: "POST", body: { tier_limits } });
-  if (r.ok) { haptic("ok"); showToast(`Đã lưu quyền hạng ${TIER_LABELS[tier]}`); loadAdminData(); }
+  if (r.ok) { haptic("ok"); showToast(`Đã lưu quyền hạng ${TIER_LABELS[tier]}`, "ok"); loadAdminData(); }
 }
 
 function adminEditProviderModal(idx) {
@@ -1887,10 +1993,137 @@ async function adminDeleteProvider(idx) {
   const r = await apiFetch("/admin/config/save", { method: "POST", body: { providers: provs } });
   if (r.ok) { haptic("ok"); showToast("Đã xóa nguồn API"); loadAdminData(); }
 }
+function formatFostaUsageCard(k) {
+  // Support both parsed JSON from Worker v3.2 AND raw JSON text from older Worker v3.0/v3.1!
+  let obj = k.parsed || k.data || null;
+  if (!obj && typeof k.text === "string" && k.text.trim().startsWith("{")) {
+    try { obj = JSON.parse(k.text); } catch {}
+  }
+  const q = obj?.quota;
+  if (!q) {
+    return `<div class="card-item lg-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;"><strong>Key #${k.slot}</strong><span class="tag-quiet">${esc(k.masked)}</span></div>
+      <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;white-space:pre-wrap;">${esc(k.text || k.error || "Không có dữ liệu số dư.")}</div>
+    </div>`;
+  }
+  const limit = Number(q.limit || 0);
+  const used = Number(q.used || 0);
+  const remaining = q.remaining !== undefined ? Number(q.remaining) : Math.max(0, limit - used);
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 10000) / 100) : 0;
+  const barCls = pct >= 90 ? "danger" : (pct >= 70 ? "warn" : "");
+  const todayP = (obj.periods || []).find(p => p.period === "today");
+  const todayReq = todayP ? Number(todayP.requests || 0) : 0;
+  const todayCharged = todayP ? Math.round(Number(todayP.charged || 0)) : 0;
+  const keyName = obj.key?.name ? ` · ${obj.key.name}` : "";
+  const isAct = obj.key?.isActive !== false;
+  const daysLeft = q.daysLeft && Number.isFinite(Number(q.daysLeft)) ? Math.round(Number(q.daysLeft)) : null;
+
+  return `<div class="card-item lg-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+      <strong style="font-size:14px;">Key #${k.slot}${esc(keyName)}</strong>
+      <span class="tag-st ${isAct ? "st-active" : "st-revoked"}">${isAct ? "Đang hoạt động" : "Ngừng"}</span>
+    </div>
+    <div style="font-size:11.5px;font-family:var(--font-mono);color:var(--ink-3);margin-top:2px;">${esc(obj.key?.masked || k.masked)}</div>
+
+    <div style="margin-top:10px;">
+      <div style="font-size:12px;color:var(--ink-2);">Số dư token còn lại</div>
+      <div class="num" style="font-size:22px;font-weight:500;color:var(--ok-ink);letter-spacing:-0.02em;margin-top:2px;">${remaining.toLocaleString("vi-VN")} <span style="font-size:13px;color:var(--ink-2);font-weight:400;">token</span></div>
+    </div>
+
+    <div class="tok-bar-track"><div class="tok-bar-fill ${barCls}" style="width:${Math.max(2, pct)}%;"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);" class="num">
+      <span>Đã dùng: ${used.toLocaleString("vi-VN")} (${pct}%)</span>
+      <span>Tổng: ${limit.toLocaleString("vi-VN")}</span>
+    </div>
+
+    <div class="tok-stat-grid">
+      <div class="tok-stat-cell">
+        <div class="tok-stat-lbl">Hôm nay</div>
+        <div class="tok-stat-val num">${todayCharged.toLocaleString("vi-VN")} tok (${todayReq} lượt)</div>
+      </div>
+      <div class="tok-stat-cell">
+        <div class="tok-stat-lbl">Trung bình / Dự kiến</div>
+        <div class="tok-stat-val num">${Math.round(Number(q.avgPerDay || 0)).toLocaleString("vi-VN")}/ngày${daysLeft !== null ? ` · ~${daysLeft.toLocaleString("vi-VN")}d` : ""}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 async function adminCheckProviderUsage(providerId) {
-  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Số dư API Key</h3><div id="pu-out" style="font-size:13px;color:var(--ink-2);">Đang kiểm tra...</div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button class="btn-p tap" onclick="closeModal()">Đóng</button></div>`);
-  const r = await apiFetch("/admin/providers/usage", { method: "POST", body: { providerId } }), d = await r.json();
-  document.getElementById("pu-out").innerHTML = (d.keys || []).map(k => `<div class="card-item lg-card"><b>Key #${k.slot}</b> (${esc(k.masked)})<pre style="white-space:pre-wrap;font-size:12px;color:var(--accent-ink);margin-top:6px;line-height:1.5;font-family:var(--font-mono);">${esc(k.text || JSON.stringify(k.data || k.error || ""))}</pre></div>`).join("") || "Không có dữ liệu.";
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Số dư Token API Key</h3><div id="pu-out" style="font-size:13px;color:var(--ink-2);">Đang lấy số dư thực tế...</div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button type="button" class="btn-p tap" onclick="closeModal()">Đóng</button></div>`);
+  try {
+    const r = await apiFetch("/admin/providers/usage", { method: "POST", body: { providerId } }), d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Không kiểm tra được số dư");
+    document.getElementById("pu-out").innerHTML = (d.keys || []).map(formatFostaUsageCard).join("") || "Không có API Key nào.";
+  } catch (e) {
+    document.getElementById("pu-out").innerHTML = `<div style="color:var(--danger-ink);">Lỗi: ${esc(e.message)}</div>`;
+  }
+}
+
+async function openUserTokenBalanceModal() {
+  haptic("tap");
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Số dư Token của bạn</h3>
+    <div id="utb-body" style="font-size:13px;color:var(--ink-2);">Đang đồng bộ số dư mới nhất...</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button type="button" class="btn-p tap" onclick="closeModal()">Đóng</button>
+    </div>`);
+  try {
+    const r = await apiFetch("/auth/me");
+    const d = await r.json();
+    if (r.ok && d.user) { S.user = d.user; syncAccountUI(); }
+  } catch {}
+
+  const u = S.user;
+  const el = document.getElementById("utb-body");
+  if (!u || !el) return;
+  if (u.role === "admin") {
+    el.innerHTML = `<div class="card-item lg-card" style="margin:0;">
+      <div style="font-size:12px;color:var(--ink-2);">Tài khoản Quản trị viên</div>
+      <div style="font-size:20px;font-weight:500;color:var(--ok-ink);margin:4px 0 8px;">Không giới hạn Token & Lượt chat</div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Để xem số dư thật của các API Key Fosta / Fosta VIP, bấm nút bên dưới:</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn-blue tap" style="flex:1;" onclick="adminCheckProviderUsage('fosta')">Số dư Fosta</button>
+        <button type="button" class="btn-s tap" style="flex:1;" onclick="adminCheckProviderUsage('fosta_vip')">Số dư Fosta VIP</button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const limitTok = Number(u.limits?.daily_tokens || 0);
+  const usedTok = Number(u.dailyTokens || 0);
+  const remTok = Math.max(0, limitTok - usedTok);
+  const pct = limitTok > 0 ? Math.min(100, Math.round((usedTok / limitTok) * 10000) / 100) : 0;
+  const barCls = pct >= 90 ? "danger" : (pct >= 70 ? "warn" : "");
+  const isUnlimMsgs = Boolean(u.limits?.unlimited_msgs) || Number(u.limits?.daily_msgs) < 0;
+  const msgMax = isUnlimMsgs ? "Vô hạn" : `${Number(u.limits?.daily_msgs || 0).toLocaleString("vi-VN")} tin`;
+  const msgRem = isUnlimMsgs ? "Vô hạn" : `${Math.max(0, Number(u.limits?.daily_msgs || 0) - Number(u.dailyMsgs || 0)).toLocaleString("vi-VN")} tin`;
+
+  el.innerHTML = `<div class="card-item lg-card" style="margin:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <span style="font-size:12.5px;color:var(--ink-2);">Gói hiện tại</span>
+      <span class="tag-st tier-${esc(u.keyTier || "classic")}">${esc(u.planLabel || "Chưa kích hoạt")}</span>
+    </div>
+    <div style="margin-top:10px;">
+      <div style="font-size:12px;color:var(--ink-2);">Token còn lại hôm nay</div>
+      <div class="num" style="font-size:24px;font-weight:500;color:var(--ok-ink);letter-spacing:-0.02em;margin-top:2px;">${remTok.toLocaleString("vi-VN")} <span style="font-size:13px;color:var(--ink-2);font-weight:400;">token</span></div>
+    </div>
+    <div class="tok-bar-track"><div class="tok-bar-fill ${barCls}" style="width:${Math.max(2, pct)}%;"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);" class="num">
+      <span>Đã dùng: ${usedTok.toLocaleString("vi-VN")} (${pct}%)</span>
+      <span>Ngân sách: ${limitTok.toLocaleString("vi-VN")}</span>
+    </div>
+    <div class="tok-stat-grid">
+      <div class="tok-stat-cell">
+        <div class="tok-stat-lbl">Lượt tin nhắn còn lại</div>
+        <div class="tok-stat-val num">${msgRem}</div>
+      </div>
+      <div class="tok-stat-cell">
+        <div class="tok-stat-lbl">Đã dùng / Hạn mức ngày</div>
+        <div class="tok-stat-val num">${Number(u.dailyMsgs || 0)} / ${msgMax}</div>
+      </div>
+    </div>
+    <div style="font-size:11.5px;color:var(--ink-3);margin-top:10px;">Ngân sách token tự động làm mới vào 00:00 mỗi ngày (giờ Việt Nam).</div>
+  </div>`;
 }
 
 // Live /v1/models Scanner Modal (4A Đột phá)
@@ -2264,8 +2497,9 @@ function bindEvents() {
     autoGrow(); updateOrbButton(); checkAtTrigger(ta.value);
   });
   ta.addEventListener("input", e => {
+    updateOrbButton();
     if (composing || e.isComposing) return;
-    autoGrow(); updateOrbButton(); checkAtTrigger(ta.value);
+    requestAnimationFrame(() => { autoGrow(); checkAtTrigger(ta.value); });
   });
   ta.addEventListener("keydown", e => {
     if (composing || e.isComposing || e.keyCode === 229) return;
@@ -2404,7 +2638,25 @@ function openModal(html) { document.getElementById("modal-box").innerHTML = html
 function closeModal() { document.getElementById("modal-bg").classList.remove("open"); }
 function openLightbox(src) { openModal(`<img src="${src}" style="width:100%;border-radius:14px;margin-bottom:10px;"/><div style="display:flex;justify-content:flex-end;gap:8px;"><a class="btn-s tap" href="${src}" download="apiai-hd.jpg" style="text-decoration:none;">Tải ảnh</a><button class="btn-p tap" onclick="closeModal()">Đóng</button></div>`); }
 let tTimer = null;
-function showToast(msg) { const t = document.getElementById("toast"); document.getElementById("toast-msg").textContent = msg; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show"); clearTimeout(tTimer); tTimer = setTimeout(() => t.classList.remove("show"), 2600); }
+function showToast(msg, kind = null) {
+  const t = document.getElementById("toast"), dot = document.getElementById("toast-dot");
+  const txt = String(msg || "");
+  document.getElementById("toast-msg").textContent = txt;
+  if (dot) {
+    let k = kind;
+    if (!k) {
+      if (/(lỗi|thất bại|sai|không thể|hết giới hạn|bị khóa|thu hồi)/i.test(txt)) k = "err";
+      else if (/(yêu cầu|chưa|cần|nhập đủ|tối thiểu|không khớp)/i.test(txt)) k = "warn";
+      else k = "ok";
+    }
+    dot.className = "toast-dot " + k;
+    dot.innerHTML = k === "ok"
+      ? `<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`
+      : `<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.5"/></svg>`;
+  }
+  t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+  clearTimeout(tTimer); tTimer = setTimeout(() => t.classList.remove("show"), 2800);
+}
 function copyText(txt, ok = "Đã sao chép") { navigator.clipboard?.writeText(txt).then(() => showToast(ok)).catch(() => showToast("Không thể sao chép")); }
 
 boot();
