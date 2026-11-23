@@ -1,4 +1,4 @@
-/* API AI v3.4 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
+/* API AI v3.5 — Vision Fix + Slash Commands (/new /compact /plan) + Reference Image Style-Lock + Office Studio (PPTX/DOCX/XLSX/PDF) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
@@ -795,22 +795,75 @@ function toggleSkillPill(id) { haptic("switch"); S.skillIds = S.skillIds.include
 
 /* ===== HD VISION STUDIO ===== */
 function setImgQuality(q) { haptic("tap"); S.cfg.imgQuality = q; dbPut("kv", S.cfg); applyTheme(); showToast(`Chất lượng ảnh: ${q === "fast" ? "Nhanh" : q === "ultra" ? "Siêu nét" : "HD 2048px"}`); }
-function processImageFile(file) {
-  const qMap = { fast: { max: 1024, q: 0.84 }, hd: { max: 2048, q: 0.92 }, ultra: { max: 2560, q: 0.96 } };
+function readFileAsDataUrl(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result || ""));
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+function isCanvasSolidBlack(ctx, w, h) {
+  try {
+    const stepX = Math.max(1, Math.floor(w / 14));
+    const stepY = Math.max(1, Math.floor(h / 14));
+    let total = 0, dark = 0;
+    for (let y = stepY; y < h - stepY; y += stepY) {
+      for (let x = stepX; x < w - stepX; x += stepX) {
+        const px = ctx.getImageData(x, y, 1, 1).data;
+        total++;
+        if (px[0] <= 3 && px[1] <= 3 && px[2] <= 3) dark++;
+      }
+    }
+    return total > 8 && (dark / total) >= 0.985;
+  } catch { return false; }
+}
+
+async function processImageFile(file) {
+  const qMap = { fast: { max: 1024, q: 0.86 }, hd: { max: 1920, q: 0.92 }, ultra: { max: 2400, q: 0.95 } };
   const allowHd = S.user?.role === "admin" || S.user?.limits?.allow_hd_vision !== false;
   const preset = allowHd ? (qMap[S.cfg.imgQuality] || qMap.hd) : qMap.fast;
-  return new Promise((res, rej) => {
-    const img = new Image(), url = URL.createObjectURL(file);
-    img.onload = () => {
-      let { width: w, height: h } = img;
-      if (w > preset.max || h > preset.max) { const r = Math.min(preset.max / w, preset.max / h); w = Math.round(w * r); h = Math.round(h * r); }
-      const c = document.createElement("canvas"); c.width = w; c.height = h;
-      const ctx = c.getContext("2d"); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(img, 0, 0, w, h); const dataUrl = c.toDataURL("image/jpeg", preset.q); URL.revokeObjectURL(url); res({ dataUrl, w, h });
-    };
-    img.onerror = e => { URL.revokeObjectURL(url); rej(e); };
-    img.src = url;
+
+  // Read via FileReader first (fixes Android WebView content:// black canvas bug!)
+  const rawDataUrl = await readFileAsDataUrl(file);
+  const img = new Image();
+  await new Promise((res, rej) => {
+    img.onload = res;
+    img.onerror = rej;
+    img.src = rawDataUrl;
   });
+  try { if (typeof img.decode === "function") await img.decode(); } catch {}
+
+  let w = img.naturalWidth || img.width || 1024;
+  let h = img.naturalHeight || img.height || 1024;
+
+  // If image already fits within preset & reasonable size (< 2.5MB) and is JPEG/PNG/WEBP, keep crisp original!
+  if (w <= preset.max && h <= preset.max && file.size <= 2600000 && /^data:image\/(jpeg|jpg|png|webp);/i.test(rawDataUrl)) {
+    return { dataUrl: rawDataUrl, w, h };
+  }
+
+  if (w > preset.max || h > preset.max) {
+    const ratio = Math.min(preset.max / w, preset.max / h);
+    w = Math.max(1, Math.round(w * ratio));
+    h = Math.max(1, Math.round(h * ratio));
+  }
+
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+
+  // Automatic black-frame guard: if WebView GPU canvas failed to blit, return safe rawDataUrl!
+  if (isCanvasSolidBlack(ctx, w, h) && file.size <= 6500000) {
+    return { dataUrl: rawDataUrl, w: img.naturalWidth || w, h: img.naturalHeight || h };
+  }
+  const dataUrl = c.toDataURL("image/jpeg", preset.q);
+  return { dataUrl: dataUrl && dataUrl.length > 64 ? dataUrl : rawDataUrl, w, h };
 }
 function enhanceCanvasPixels(ctx, w, h) {
   const imgData = ctx.getImageData(0, 0, w, h), d = imgData.data, hist = new Uint32Array(256), total = w * h;
@@ -833,21 +886,39 @@ function openVisionStudio(idx) {
   const att = S.atts[idx]; if (!att?.dataUrl) return;
   studioState = { attIndex: idx, imgObj: new Image(), enhanced: !!att.enhanced, cropOn: false, box: { x: 0.2, y: 0.2, w: 0.52, h: 0.52 } };
   openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:4px;">HD Vision Studio</h3>
-    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Làm rõ ảnh mờ hoặc khoanh vùng soi chi tiết phóng to.</p>
+    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Làm rõ ảnh mờ, khoanh vùng soi chi tiết hoặc dựng lại giao diện từ ảnh chụp.</p>
     <div class="vision-stage" id="v-stage"><canvas id="v-canvas"></canvas><div id="crop-rect"><div id="crop-handle"></div></div></div>
-    <div style="display:flex;gap:8px;margin-top:12px;">
-      <button id="btn-enh" class="btn-s tap ${studioState.enhanced?"lg-active":""}" style="flex:1;" onclick="toggleStudioEnhance()">Làm rõ ảnh</button>
-      <button id="btn-crop-mode" class="btn-s tap" style="flex:1;" onclick="toggleStudioCrop()">Soi chi tiết</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+      <button type="button" id="btn-enh" class="btn-s tap ${studioState.enhanced?"lg-active":""}" style="flex:1;" onclick="toggleStudioEnhance()">Làm rõ ảnh</button>
+      <button type="button" id="btn-crop-mode" class="btn-s tap" style="flex:1;" onclick="toggleStudioCrop()">Soi chi tiết</button>
+      <button type="button" class="btn-blue tap" style="flex:1;" onclick="closeModal();triggerUiFromScreenshot(${idx})">Dựng UI từ ảnh</button>
     </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-      <button class="btn-s tap" onclick="closeModal()">Đóng</button>
-      <button id="btn-crop-add" class="btn-blue tap" style="display:none;" onclick="commitStudioCrop()">Gửi kèm vùng soi</button>
-      <button class="btn-p tap" onclick="applyStudioEnhanced()">Áp dụng</button>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button type="button" class="btn-s tap" onclick="closeModal()">Đóng</button>
+      <button type="button" id="btn-crop-add" class="btn-blue tap" style="display:none;" onclick="commitStudioCrop()">Gửi kèm vùng soi</button>
+      <button type="button" class="btn-p tap" onclick="applyStudioEnhanced()">Áp dụng</button>
     </div>`);
-  studioState.imgObj.onload = () => { drawStudioCanvas(); bindCropGestures(); };
+  studioState.imgObj.onload = async () => {
+    try { if (typeof studioState.imgObj.decode === "function") await studioState.imgObj.decode(); } catch {}
+    drawStudioCanvas(); bindCropGestures();
+  };
   studioState.imgObj.src = att.origDataUrl || att.dataUrl;
 }
-function drawStudioCanvas() { const cv = document.getElementById("v-canvas"), img = studioState.imgObj; if (!cv || !img) return; const sc = Math.min(1, 1280 / img.width); cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc); const ctx = cv.getContext("2d"); ctx.drawImage(img, 0, 0, cv.width, cv.height); if (studioState.enhanced) enhanceCanvasPixels(ctx, cv.width, cv.height); positionCropRect(); }
+function drawStudioCanvas() {
+  const cv = document.getElementById("v-canvas"), img = studioState.imgObj;
+  if (!cv || !img) return;
+  const nw = img.naturalWidth || img.width || 800;
+  const nh = img.naturalHeight || img.height || 800;
+  const sc = Math.min(1, 1280 / Math.max(nw, nh));
+  cv.width = Math.max(1, Math.round(nw * sc));
+  cv.height = Math.max(1, Math.round(nh * sc));
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(img, 0, 0, cv.width, cv.height);
+  if (studioState.enhanced) enhanceCanvasPixels(ctx, cv.width, cv.height);
+  positionCropRect();
+}
 function toggleStudioEnhance() { haptic("switch"); studioState.enhanced = !studioState.enhanced; document.getElementById("btn-enh")?.classList.toggle("lg-active", studioState.enhanced); drawStudioCanvas(); }
 function toggleStudioCrop() { haptic("switch"); studioState.cropOn = !studioState.cropOn; document.getElementById("btn-crop-mode")?.classList.toggle("lg-active", studioState.cropOn); document.getElementById("crop-rect").style.display = studioState.cropOn ? "block" : "none"; document.getElementById("btn-crop-add").style.display = studioState.cropOn ? "inline-flex" : "none"; positionCropRect(); }
 function positionCropRect() { const r = document.getElementById("crop-rect"); if (!r || !studioState.cropOn) return; const b = studioState.box; r.style.left = b.x*100+"%"; r.style.top = b.y*100+"%"; r.style.width = b.w*100+"%"; r.style.height = b.h*100+"%"; }
@@ -891,6 +962,14 @@ async function ensurePdfJsLoaded() {
 }
 
 async function extractRealFileText(file) {
+  if (/\.(docx|pptx|xlsx)$/i.test(file.name) && window.OfficeStudio?.extractOfficeFileText) {
+    try {
+      showToast(`Đang đọc nội dung tệp Office: ${file.name}...`);
+      return await window.OfficeStudio.extractOfficeFileText(file);
+    } catch (e) {
+      return { text: `(Không đọc được tệp Office "${file.name}": ${e.message})`, pages: 0 };
+    }
+  }
   const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
   if (!isPdf) {
     const raw = (await file.text()).slice(0, 50000);
@@ -1016,10 +1095,21 @@ function buildSystemPrompt(chat, query, hasImgs, handoffSummary = "", digestedRe
       arr.push(`KỸ NĂNG @${sk.name}:\n${(sk.prompt || "").slice(0, 5000)}`);
     }
   });
-  if (S.activeTool === "canvas") arr.push("CANVAS: Xuất toàn bộ mã trong 1 khối ```html ... ```.");
+  if (chat?.compactSummary) {
+    arr.push("NGỮ CẢNH DỰ ÁN ĐÃ NÉN (/compact — GIỮ NGUYÊN MẠCH DỰ ÁN NÀY):
+" + chat.compactSummary);
+  }
+  if (S.activeTool === "canvas") arr.push("CANVAS: Xuất toàn bộ mã hoàn chỉnh chạy độc lập trong ĐÚNG 1 khối ```html ... ```. Nếu có ảnh chụp màn hình đính kèm, bám sát bố cục, màu sắc và sửa triệt để lỗi giao diện.");
   if (S.activeTool === "deep_research") arr.push("DEEP RESEARCH: Phân tích đa chiều có bảng so sánh và kết luận thực tế.");
   if (S.activeTool === "web_search") arr.push("TÌM KIẾM WEB TRỰC TIẾP: Ưu tiên tổng hợp từ các nguồn web thực tế được cung cấp ở trên và dẫn rõ nguồn.");
   if (S.activeTool === "guided") arr.push("HỌC CÓ HƯỚNG DẪN: Giải thích bản chất kèm câu hỏi kiểm tra tư duy.");
+  if (S._turnPlanLock) {
+    arr.push("CHẾ ĐỘ LẬP KẾ HOẠCH TRƯỚC (/plan — KHÓA SỬA CODE): TUYỆT ĐỐI CHƯA VIẾT HOẶC SỬA CODE HOÀN CHỈNH. Chỉ lập kế hoạch triển khai chi tiết gồm: 1) Phân tích mục tiêu & phạm vi, 2) Danh sách tệp/thành phần cần chạm tới, 3) Từng bước thực hiện theo thứ tự ưu tiên, 4) Rủi ro & kịch bản kiểm thử. Cuối bản kế hoạch dừng lại để người dùng bấm Duyệt trước khi làm.");
+  }
+  const officeIntent = detectOfficeIntent(query, S.activeTool);
+  if (officeIntent && canUseOfficeStudio()) {
+    arr.push(buildOfficeSystemDirective(officeIntent));
+  }
   if (S.cfg.mcpBuiltin?.builderAssist !== false && !tutorExtraSys) {
     const busySched = (S.tutors || []).map(t => `- ${t.name} (${t.subject}): thứ ${(t.scheduleDays||[]).join(",")} lúc ${t.scheduleTime}`).join("\n") || "(Chưa có lịch nào)";
     const okMods = getAllowedRealModels().map(m => m.id).join(", ");
@@ -1062,9 +1152,10 @@ function detectImageIntent(text, chat) {
   // Never hijack coding/diagram/UI design requests
   if (/(viết code|lập trình|html|css|javascript|python|pine script|mql5|svg|react|canvas|giao diện web)/i.test(t)) return null;
 
-  // 1. Direct explicit draw / generate image intent
-  if (/^(hãy\s+)?(tạo|vẽ|sinh|render|thiết kế)\s+(giúp\s+|cho\s+(mình|tôi|em)\s+)?(1\s+|một\s+)?(hình|ảnh|bức ảnh|bức tranh|tranh|nhân vật|chibi|logo|avatar|poster|wallpaper)/i.test(t)
-    || /^(generate|create|draw|paint)\s+(an?\s+)?(image|picture|photo|illustration|art|chibi|logo)/i.test(t)) {
+  // 1. Direct explicit draw / generate image intent (including banner, 1536x1024, save filename)
+  if (/^(hãy\s+)?(tạo|vẽ|sinh|render|thiết kế)\s+(giúp\s+|cho\s+(mình|tôi|em)\s+)?(1\s+|một\s+)?(hình|ảnh|bức ảnh|bức tranh|tranh|nhân vật|chibi|logo|avatar|poster|banner|cover|thumbnail|wallpaper)/i.test(t)
+    || /^(generate|create|draw|paint)\s+(an?\s+)?(image|picture|photo|illustration|art|chibi|logo|banner|poster)/i.test(t)
+    || (/\b(vẽ|tạo ảnh|tạo banner|tạo poster)\b/i.test(t) && (/\d{3,4}\s*[x×]\s*\d{3,4}/i.test(t) || /lưu\s+ra\s+[\w.-]+\.(png|jpg|jpeg|webp)/i.test(t)))) {
     return text.trim();
   }
 
@@ -1359,6 +1450,8 @@ async function runFourAgentPipeline(chat, userPrompt, resumeMsg = null) {
     pipe.steps.push({ id: "st-err-" + Date.now(), role: "error", num: "!", title: "Dừng dây chuyền", modelLabel: "", status: "fail", text: e.name === "AbortError" ? "Đã dừng theo yêu cầu." : e.message });
     aiMsg.text = `Dây chuyền dừng: ${e.message}`;
   } finally {
+    S._turnPlanLock = false;
+    if (S.activeTool && S.activeTool.startsWith("office_")) { S.activeTool = null; renderChips(); }
     aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
     bgStopTask();
     apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
@@ -1414,9 +1507,37 @@ async function sendPrompt(overrideText = null, opts = {}) {
   }
 
   const input = document.getElementById("prompt-in");
-  const text = (overrideText !== null ? overrideText : input.value).trim();
+  let text = (overrideText !== null ? overrideText : input.value).trim();
   if (!opts.reuseLastUser && !text && !S.atts.length) return;
+  document.getElementById("slash-popup")?.classList.remove("open");
   haptic("tap");
+
+  // Handle Slash Commands (/new, /compact, /plan, /slide, /doc, /excel, /pdf, /img)
+  if (!opts.reuseLastUser && text.startsWith("/")) {
+    const spIdx = text.search(/\s/);
+    const cmd = (spIdx === -1 ? text : text.slice(0, spIdx)).toLowerCase();
+    const rest = spIdx === -1 ? "" : text.slice(spIdx + 1).trim();
+    if (cmd === "/new") {
+      if (overrideText === null) { input.value = ""; autoGrow(); }
+      startNewChat(); showToast("Đã mở phiên trò chuyện mới", "ok"); return;
+    }
+    if (cmd === "/compact") {
+      if (overrideText === null) { input.value = ""; autoGrow(); }
+      return runCompactSession();
+    }
+    const toolMap = { "/plan": "plan", "/slide": "office_pptx", "/doc": "office_docx", "/excel": "office_xlsx", "/pdf": "office_pdf", "/img": "image" };
+    if (toolMap[cmd]) {
+      S.activeTool = toolMap[cmd];
+      renderChips();
+      if (!rest) {
+        if (overrideText === null) { input.value = ""; autoGrow(); }
+        showToast(`Đã bật chế độ ${cmd} · Nhập nội dung rồi bấm Gửi`);
+        input.focus();
+        return;
+      }
+      text = rest;
+    }
+  }
 
   [...text.matchAll(/@([a-zA-Z0-9_-]+)/g)].forEach(m => {
     const sk = S.skills.find(s => s.name.toLowerCase() === m[1].toLowerCase());
@@ -1459,8 +1580,13 @@ async function sendPrompt(overrideText = null, opts = {}) {
   if (activeTeam && !opts.forceSwitch) {
     return runTeamPipeline(chat, activeTeam, text);
   }
-  const autoImgPrompt = (!activeTutor && S.activeTool === "image") ? text : (!activeTutor && !sentAtts.length && !opts.forceSwitch ? detectImageIntent(text, chat) : null);
-  if (autoImgPrompt) return runGenImage(chat, autoImgPrompt);
+  const autoImgPrompt = (!activeTutor && S.activeTool === "image") ? text : (!activeTutor && !opts.forceSwitch ? detectImageIntent(text, chat) : null);
+  if (autoImgPrompt) return runGenImage(chat, autoImgPrompt, sentAtts);
+
+  const isPlanLock = Boolean(opts.planLock) || S.activeTool === "plan"
+    || /(lập kế hoạch trước|chưa sửa code|chưa viết code|chỉ lập kế hoạch|lên kế hoạch trước|plan first)/i.test(text);
+  S._turnPlanLock = isPlanLock;
+  if (S.activeTool === "plan") { S.activeTool = null; renderChips(); }
 
   // Determine model (Auto Tutor smart routing if inside Tutor!)
   let chosenUi = S.models.find(m => m.id === S.cfg.selectedModel) || S.models.find(x => x.allowed) || S.models[0];
@@ -1486,7 +1612,7 @@ async function sendPrompt(overrideText = null, opts = {}) {
     id: "m-" + (Date.now() + 1), role: "assistant", text: "", thinking: "", thinkingLevel: S.cfg.thinkingLevel || "high", thinkMs: 0,
     modelLabel: `${chosenUi.short || chosenUi.title} · ${THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel)?.title || "Cao"}`,
     slot: "", citedFile: sentAtts[0]?.name || "", toolSteps: [], sources: [], fetchedRepoUrl: "",
-    feedback: null, streaming: true, failedSwitch: false, canSwitch: false, ts: Date.now()
+    feedback: null, streaming: true, failedSwitch: false, canSwitch: false, isPlanLock: Boolean(S._turnPlanLock), planPrompt: S._turnPlanLock ? text : "", ts: Date.now()
   };
   chat.messages.push(aiMsg); renderMessages(); scrollToBottom(true);
 
@@ -1496,7 +1622,8 @@ async function sendPrompt(overrideText = null, opts = {}) {
     const preFlightContext = await runPreFlightToolsAndMcp(aiMsg, text, chosenUi);
     const fullSysPrompt = preFlightContext ? `${sysPrompt}\n\n${preFlightContext}` : sysPrompt;
     const msgs = [{ role: "system", content: fullSysPrompt }];
-    for (const m of chat.messages.slice(0, -1).filter(x => !x.failedSwitch).slice(-20)) {
+    const startIdx = Number.isInteger(chat.compactedUpToIndex) ? Math.max(0, chat.compactedUpToIndex) : 0;
+    for (const m of chat.messages.slice(startIdx, -1).filter(x => !x.failedSwitch).slice(-20)) {
       if (m.role === "assistant") { msgs.push({ role: "assistant", content: m.text || "" }); continue; }
       const imgs = (m.atts || []).filter(a => a.dataUrl), docs = (m.atts || []).filter(a => a.type === "file");
       let txt = m.text || "";
@@ -1671,13 +1798,96 @@ async function sendPrompt(overrideText = null, opts = {}) {
   }
 }
 
-async function runGenImage(chat, prompt) {
-  const aiMsg = { id: "m-" + (Date.now() + 1), role: "assistant", text: "Đang tạo hình ảnh...", modelLabel: "Tạo ảnh", streaming: true, ts: Date.now() };
-  chat.messages.push(aiMsg); renderMessages(); S.streaming = true; updateOrbButton();
+function parseImageRequestMeta(rawPrompt) {
+  const txt = String(rawPrompt || "");
+  const szM = txt.match(/(\d{3,4})\s*[x×]\s*(\d{3,4})/i);
+  const size = szM ? `${szM[1]}x${szM[2]}` : "1024x1024";
+  const saveM = txt.match(/(?:lưu\s+(?:ra|thành|tệp|file)|xuất\s+(?:ra|file)|save\s+as)\s+["'`]?([\w.-]+\.(?:png|jpg|jpeg|webp))["'`]?/i);
+  const refM = txt.match(/(?:dựa\s+theo|theo\s+(?:ảnh|hình|file|mẫu|phong\s+cách)?|giữ\s+(?:đúng\s+)?phong\s+cách\s+(?:của\s+)?)\s+["'`]?([\w.-]+\.(?:png|jpg|jpeg|webp))["'`]?/i);
+  const saveName = saveM ? saveM[1] : null;
+  const refName = refM ? refM[1] : null;
+  return { size, saveName, refName };
+}
+
+async function resolveReferenceImage(refName, sentAtts, chat) {
+  // 1. Newly attached image in current turn
+  const direct = (sentAtts || []).find(a => a.dataUrl);
+  if (direct) return { name: direct.name || refName || "ảnh mẫu", dataUrl: direct.dataUrl };
+  if (!refName) return null;
+  const low = refName.toLowerCase();
+
+  // 2. Search previous messages in current chat
+  for (const m of [...(chat?.messages || [])].reverse()) {
+    const attHit = (m.atts || []).find(a => a.dataUrl && (a.name || "").toLowerCase().includes(low));
+    if (attHit) return { name: attHit.name, dataUrl: attHit.dataUrl };
+    if (m.genImg && (m.downloadName || "").toLowerCase().includes(low)) {
+      return { name: m.downloadName, dataUrl: m.genImg };
+    }
+  }
+  // 3. Search Library media
+  const libHit = (S.library || []).find(l => l.type === "media" && l.data && (l.title || "").toLowerCase().includes(low));
+  if (libHit) return { name: libHit.title, dataUrl: libHit.data };
+
+  // 4. Built-in app logo.png fallback if user explicitly references logo.png
+  if (low === "logo.png" || low === "logo-mark.png") {
+    try {
+      const r = await fetch(low);
+      if (r.ok) {
+        const blob = await r.blob();
+        const dataUrl = await readFileAsDataUrl(blob);
+        return { name: low, dataUrl };
+      }
+    } catch {}
+  }
+  return null;
+}
+
+async function runGenImage(chat, prompt, sentAtts = []) {
+  const meta = parseImageRequestMeta(prompt);
+  const aiMsg = {
+    id: "m-" + (Date.now() + 1), role: "assistant", text: "", modelLabel: `Tạo ảnh · ${meta.size}`,
+    toolSteps: [], streaming: true, downloadName: meta.saveName || `api-ai-${Date.now().toString(36)}.png`,
+    imageSize: meta.size, ts: Date.now()
+  };
+  chat.messages.push(aiMsg); renderMessages(); scrollToBottom(true);
+  S.streaming = true; updateOrbButton();
+
+  const pushS = lbl => { const st = { id: "is" + Date.now() + Math.random().toString(36).slice(2, 5), label: lbl, status: "running", start: Date.now(), ms: 0, raw: "" }; aiMsg.toolSteps.push(st); renderMessages(); return st; };
+  const doneS = (st, ok, lbl, raw = "") => { st.status = ok ? "done" : "err"; st.ms = Date.now() - st.start; if (lbl) st.label = lbl; if (raw) st.raw = raw; renderMessages(); };
+
   try {
-    const res = await apiFetch("/ai/image", { method: "POST", body: { prompt, size: "1024x1024" } });
+    let finalPrompt = prompt;
+    const refImg = await resolveReferenceImage(meta.refName, sentAtts, chat);
+    if (refImg?.dataUrl) {
+      const stRef = pushS(`Vision Style-Lock: phân tích phong cách từ ${refImg.name}...`);
+      try {
+        const sr = await apiFetch("/ai/digest", {
+          method: "POST",
+          body: {
+            digestMode: "vision_style",
+            readerModelId: "gpt-6.2-sol",
+            instruction: `Analyze this reference image (${refImg.name}) and extract its exact brand visual style DNA so the generated image "${prompt}" matches its palette, mood, geometry, and aesthetic.`,
+            content: "",
+            imageDataUrl: refImg.dataUrl
+          }
+        });
+        if (sr.ok) {
+          const sd = await sr.json();
+          if (sd.digest) {
+            finalPrompt = `${prompt}
+
+STRICT VISUAL STYLE MATCH (${refImg.name}): ${sd.digest}`;
+            doneS(stRef, true, `Đã khóa phong cách theo ${refImg.name}`, sd.digest);
+          } else doneS(stRef, true, `Đã đọc ảnh mẫu ${refImg.name}`);
+        } else doneS(stRef, false, `Không phân tích được ảnh mẫu, vẽ trực tiếp`);
+      } catch { doneS(stRef, false, `Bỏ qua phân tích ảnh mẫu`); }
+    }
+
+    const stGen = pushS(`Đang vẽ ảnh (${meta.size}) → ${aiMsg.downloadName}...`);
+    const res = await apiFetch("/ai/image", { method: "POST", body: { prompt: finalPrompt, size: meta.size } });
     const data = await res.json();
     if (!res.ok) {
+      doneS(stGen, false, `Lỗi vẽ ảnh (HTTP ${res.status})`);
       if (data.code === "QUOTA_EXCEEDED" && S.user) {
         if (typeof data.dailyMsgs === "number") S.user.dailyMsgs = data.dailyMsgs;
         if (typeof data.dailyLimit === "number" && S.user.limits) S.user.limits.daily_msgs = data.dailyLimit;
@@ -1688,8 +1898,11 @@ async function runGenImage(chat, prompt) {
     const hm = res.headers.get("X-Daily-Msgs"); if (hm !== null && S.user) { S.user.dailyMsgs = Number(hm); syncAccountUI(); }
     const it = data.data?.[0], src = it?.b64_json ? `data:image/png;base64,${it.b64_json}` : it?.url;
     if (!src) throw new Error("Không nhận được dữ liệu ảnh.");
-    aiMsg.text = `Đã tạo ảnh: **${prompt}**`; aiMsg.genImg = src; aiMsg.imagePrompt = prompt;
-    await saveLib("media", prompt.slice(0, 32), src); haptic("ok"); showToast("Đã lưu ảnh vào Thư viện");
+    doneS(stGen, true, `Đã vẽ xong ${aiMsg.downloadName} (${meta.size})`);
+    aiMsg.text = `Đã tạo ảnh **${aiMsg.downloadName}** (${meta.size})${refImg ? ` · giữ phong cách **${refImg.name}**` : ""}`;
+    aiMsg.genImg = src; aiMsg.imagePrompt = prompt;
+    await saveLib("media", aiMsg.downloadName, src);
+    haptic("ok"); showToast(`Đã lưu ${aiMsg.downloadName} vào Thư viện`, "ok");
   } catch (e) { aiMsg.text = `**Không thể tạo ảnh:** ${e.message}`; }
   finally { aiMsg.streaming = false; S.streaming = false; S.activeTool = null; renderChips(); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); renderMessages(); updateOrbButton(); }
 }
@@ -1778,6 +1991,10 @@ function renderMd(md) {
       const card = renderBuilderPreviewCard(b.code);
       if (card) { s = s.replace(`@@CB_${i}@@`, card); return; }
     }
+    if (b.lang.toLowerCase() === "apiai-office") {
+      const oCard = renderOfficeArtifactCard(b.code);
+      if (oCard) { s = s.replace(`@@CB_${i}@@`, oCard); return; }
+    }
     const enc = encodeURIComponent(b.code), cid = "cb-" + (++cbSeq), canPrev = ["html", "svg"].includes(b.lang.toLowerCase());
     s = s.replace(`@@CB_${i}@@`, `<div class="code-box"><div class="code-top">
       <button type="button" class="tap" style="display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12.5px;" onclick="toggleAcc('${cid}','ch-${cid}')">
@@ -1796,14 +2013,15 @@ function renderMessages() {
   const activeTutor = S.activeTutorId ? S.tutors.find(t => t.id === S.activeTutorId) : null;
   const tutorCardHtml = activeTutor ? buildTutorProactiveBanner(activeTutor) : "";
   const resumeHtml = buildPendingResumeBanner();
+  const compactHtml = buildCompactSummaryCard(chat);
 
   if (!chat || !chat.messages.length) {
-    hero.style.display = (tutorCardHtml || resumeHtml) ? "none" : "flex";
-    list.innerHTML = resumeHtml + tutorCardHtml;
+    hero.style.display = (tutorCardHtml || resumeHtml || compactHtml) ? "none" : "flex";
+    list.innerHTML = compactHtml + resumeHtml + tutorCardHtml;
     return;
   }
   hero.style.display = "none";
-  list.innerHTML = resumeHtml + tutorCardHtml + chat.messages.map(m => {
+  list.innerHTML = compactHtml + resumeHtml + tutorCardHtml + chat.messages.map(m => {
     if (m.role === "user") {
       const thumbs = (m.atts || []).filter(a => a.dataUrl).map(a => `<img class="user-thumb-img" src="${a.dataUrl}" onclick="openLightbox('${a.dataUrl}')" />`).join("");
       const docs = (m.atts || []).filter(a => a.type === "file").map(a => `<span class="cite-pill">${esc(a.name)}</span>`).join("");
@@ -1903,11 +2121,19 @@ function renderMessages() {
         <button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="sendRepoTaskToTeam('${esc(m.fetchedRepoUrl)}','${m.id}')">Chuyển cho Đội ngũ AI</button>
       </div>` : ""}
       ${m.citedFile ? `<span class="cite-pill">${esc(m.citedFile)}</span>` : ""}
-      ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}')" />
-        ${m.imagePrompt ? `<div class="img-act-row">
-          <button class="btn-s tap" style="height:32px;font-size:12px;" onclick="S.activeTool='image';sendPrompt(decodeURIComponent('${encodeURIComponent(m.imagePrompt)}'))">Tạo lại ảnh</button>
-          <button class="btn-s tap" style="height:32px;font-size:12px;" onclick="openEditImagePromptModal(decodeURIComponent('${encodeURIComponent(m.imagePrompt)}'))">Sửa mô tả</button>
-        </div>` : ""}` : ""}
+      ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}','${esc(m.downloadName || "api-ai-image.png")}')" />
+        <div class="img-act-row">
+          <button type="button" class="btn-p tap" style="height:32px;font-size:12px;padding:0 12px;" onclick="saveGeneratedImageFile('${m.id}')">Lưu ${esc(m.downloadName || "ảnh.png")}</button>
+          ${m.imagePrompt ? `<button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="S.activeTool='image';sendPrompt(decodeURIComponent('${encodeURIComponent(m.imagePrompt)}'))">Tạo lại</button>
+          <button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="openEditImagePromptModal(decodeURIComponent('${encodeURIComponent(m.imagePrompt)}'))">Sửa mô tả</button>` : ""}
+        </div>` : ""}
+      ${(!m.streaming && m.isPlanLock) ? `<div class="plan-gate-bar">
+        <div style="font-size:13px;color:var(--info-ink);font-weight:500;">Chế độ Lập kế hoạch trước · Chưa sửa code</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn-p tap" style="height:36px;font-size:13px;flex:1;" onclick="approvePlanAndExecute('${m.id}')">Duyệt kế hoạch &amp; Bắt đầu làm</button>
+          <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="refinePlanPrompt()">Chỉnh sửa kế hoạch</button>
+        </div>
+      </div>` : ""}
       ${!m.streaming ? `<div class="ai-actions"><div class="ai-act-left">
         <button class="act-icon tap ${m.feedback==="up"?"active-like":""}" onclick="rateMsg('${m.id}','up')" aria-label="Thích"><svg fill="${m.feedback==="up"?"currentColor":"none"}" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>
         <button class="act-icon tap ${m.feedback==="down"?"active-dislike":""}" onclick="rateMsg('${m.id}','down')" aria-label="Không thích"><svg fill="${m.feedback==="down"?"currentColor":"none"}" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button>
@@ -1934,7 +2160,7 @@ function openMsgMore(id) {
     <button type="button" class="s-row tap-soft" onclick="closeModal();openCanvasCode(getMsgText('${id}'),'Canvas')"><span>Mở trong Canvas</span></button>
     <button type="button" class="s-row tap-soft" onclick="closeModal();saveLib('doc','Ghi chú API AI',getMsgText('${id}'));showToast('Đã lưu Thư viện')"><span>Lưu vào Thư viện</span></button>
     <button type="button" class="s-row tap-soft" onclick="closeModal();exportMsgFile('${id}','md')"><span>Xuất phản hồi ra file .md</span></button>
-    <button type="button" class="s-row tap-soft" onclick="closeModal();exportMsgFile('${id}','html')"><span>Xuất / In PDF (.html)</span></button>
+    <button type="button" class="s-row tap-soft" onclick="closeModal();exportMsgFile('${id}','pdf')"><span>Xuất file PDF thật (.pdf)</span></button>
     <button type="button" class="s-row tap-soft" onclick="closeModal();addQuickMemory(getMsgText('${id}').slice(0,220))"><span>Lưu đoạn này vào Trí nhớ</span></button>`);
 }
 function toggleSpeak(id) {
@@ -1960,10 +2186,10 @@ async function loadAdminData(silent = false) {
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
     const wv = document.getElementById("admin-worker-ver");
     if (wv) {
-      if (data.backendVersion === "3.4") {
-        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.4</span>`;
+      if (data.backendVersion === "3.5") {
+        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.5</span>`;
       } else {
-        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.4)</span>`;
+        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.5)</span>`;
       }
     }
     if (!silent) renderAdminBody();
@@ -2098,6 +2324,7 @@ function renderAdminBody() {
         <div class="div-line" style="margin:12px 0;"></div>
         <div class="s-row" style="cursor:default;"><span>Chế độ Dây chuyền 4-Agent Lập trình</span><span class="tag-st ${(t==="pro_max"||t==="ultra")?"st-active":"st-revoked"}">${(t==="pro_max"||t==="ultra")?"Cố định mở (Pro Max+)":"Cố định khóa"}</span></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Cài & Cập nhật GitHub Repo vào Skills</span><div id="tl-gh" class="sw ${lim.allow_github_skills?"on":""}"></div></div>
+        <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Office Studio (PowerPoint, Word, Excel, PDF)</span><div id="tl-office" class="sw ${lim.allow_office_studio!==false && t!=="classic" || lim.allow_office_studio?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Gửi ảnh HD 2048px</span><div id="tl-hd" class="sw ${lim.allow_hd_vision?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Tạo hình ảnh</span><div id="tl-img" class="sw ${lim.allow_image_gen?"on":""}"></div></div>
         <div class="s-row" onclick="this.querySelector('.sw').classList.toggle('on')"><span>Deep Research</span><div id="tl-dr" class="sw ${lim.allow_deep_research?"on":""}"></div></div>
@@ -2322,6 +2549,7 @@ async function adminSaveTier(tier) {
       allowed_models: checkedModels,
       allow_four_agent: (tier === "pro_max" || tier === "ultra"),
       allow_github_skills: document.getElementById("tl-gh").classList.contains("on"),
+      allow_office_studio: document.getElementById("tl-office")?.classList.contains("on") || false,
       allow_hd_vision: document.getElementById("tl-hd").classList.contains("on"),
       allow_image_gen: document.getElementById("tl-img").classList.contains("on"),
       allow_deep_research: document.getElementById("tl-dr").classList.contains("on"),
@@ -2809,11 +3037,18 @@ async function importSkillFile(files) { const f = files?.[0]; if (!f) return; co
 
 async function saveLib(type, title, data) { const it = { id: "l-" + Date.now() + Math.random(), type, title, data, createdAt: Date.now() }; await dbPut("library", it); S.library.unshift(it); }
 function renderLibrary() {
-  const docs = S.library.filter(x => x.type === "doc"), med = S.library.filter(x => x.type === "media");
-  document.getElementById("lib-body").innerHTML = `<div style="font-size:13.5px;color:var(--ink-2);margin-bottom:8px;" class="num">Tài liệu Canvas (${docs.length})</div>
-    ${docs.map(d => `<div class="card-item lg-card" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openCanvasCode(getLib('${d.id}'),'${esc(d.title)}')"><strong style="flex:1;font-weight:500;">${esc(d.title)}</strong><button class="mini-act tap" onclick="event.stopPropagation();delLib('${d.id}')">${ICON_X}</button></div>`).join("") || `<p class="p-sub">Chưa có tài liệu</p>`}
+  const offices = S.library.filter(x => x.type === "office"), docs = S.library.filter(x => x.type === "doc"), med = S.library.filter(x => x.type === "media");
+  document.getElementById("lib-body").innerHTML = `
+    <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:8px;" class="num">Office Studio · Slide, Word, Excel &amp; PDF (${offices.length})</div>
+    ${offices.map(o => `<div class="card-item lg-card" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openSavedOfficeFromLib('${o.id}')">
+      <span class="tag-st tier-pro">${esc((o.officeKind || "doc").toUpperCase())}</span>
+      <strong style="flex:1;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(o.title)}</strong>
+      <button type="button" class="mini-act tap" onclick="event.stopPropagation();delLib('${o.id}')">${ICON_X}</button>
+    </div>`).join("") || `<p class="p-sub">Chưa lưu file Office nào</p>`}
+    <div style="font-size:13.5px;color:var(--ink-2);margin:14px 0 8px;" class="num">Tài liệu Canvas (${docs.length})</div>
+    ${docs.map(d => `<div class="card-item lg-card" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openCanvasCode(getLib('${d.id}'),'${esc(d.title)}')"><strong style="flex:1;font-weight:500;">${esc(d.title)}</strong><button type="button" class="mini-act tap" onclick="event.stopPropagation();delLib('${d.id}')">${ICON_X}</button></div>`).join("") || `<p class="p-sub">Chưa có tài liệu</p>`}
     <div style="font-size:13.5px;color:var(--ink-2);margin:14px 0 8px;" class="num">Nội dung nghe nhìn (${med.length})</div>
-    <div class="media-grid">${med.map(m => `<div class="media-tile"><img src="${m.data}" onclick="openLightbox('${m.data}')" /><button class="media-del tap" onclick="delLib('${m.id}')">${ICON_X}</button></div>`).join("")}</div>`;
+    <div class="media-grid">${med.map(m => `<div class="media-tile"><img src="${m.data}" onclick="openLightbox('${m.data}','${esc(m.title || "api-ai.png")}')" /><button type="button" class="media-del tap" onclick="delLib('${m.id}')">${ICON_X}</button></div>`).join("")}</div>`;
 }
 const getLib = id => S.library.find(x => x.id === id)?.data || "";
 async function delLib(id) { await dbDel("library", id); S.library = S.library.filter(x => x.id !== id); renderLibrary(); }
@@ -2886,17 +3121,47 @@ function bindEvents() {
   ta.addEventListener("compositionstart", () => { composing = true; });
   ta.addEventListener("compositionend", () => {
     composing = false;
-    autoGrow(); updateOrbButton(); checkAtTrigger(ta.value);
+    autoGrow(); updateOrbButton(); checkAtTrigger(ta.value); checkSlashTrigger(ta.value);
   });
   ta.addEventListener("input", e => {
     updateOrbButton();
     if (composing || e.isComposing) return;
-    requestAnimationFrame(() => { autoGrow(); checkAtTrigger(ta.value); });
+    requestAnimationFrame(() => { autoGrow(); checkAtTrigger(ta.value); checkSlashTrigger(ta.value); });
   });
   ta.addEventListener("keydown", e => {
     if (composing || e.isComposing || e.keyCode === 229) return;
+    if (handleSlashKeydown(e)) return;
     if (e.key === "Enter" && !e.shiftKey && window.innerWidth >= 768) { e.preventDefault(); sendPrompt(); }
   });
+  // Direct screenshot paste from clipboard into chat!
+  ta.addEventListener("paste", e => {
+    const items = e.clipboardData?.items || [];
+    const imgFiles = [];
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) imgFiles.push(f);
+      }
+    }
+    if (imgFiles.length) { e.preventDefault(); handleImages(imgFiles); }
+  });
+  // Deck player keyboard & swipe controls
+  document.addEventListener("keydown", e => {
+    const dp = document.getElementById("deck-player-ov");
+    if (!dp?.classList.contains("open")) return;
+    if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); window.OfficeStudio?.stepSlide(1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); window.OfficeStudio?.stepSlide(-1); }
+    else if (e.key === "Escape") { window.OfficeStudio?.closePlayer(); }
+  });
+  const dpVp = document.getElementById("dp-viewport");
+  if (dpVp) {
+    let sx = 0;
+    dpVp.addEventListener("pointerdown", e => { sx = e.clientX; }, { passive: true });
+    dpVp.addEventListener("pointerup", e => {
+      const dx = e.clientX - sx;
+      if (Math.abs(dx) > 48) window.OfficeStudio?.stepSlide(dx < 0 ? 1 : -1);
+    }, { passive: true });
+  }
   document.getElementById("chat-scroll").addEventListener("scroll", () => { document.getElementById("btn-scroll-down").classList.toggle("show", !isNearBottom() && S.activeChatId !== null); }, { passive: true });
   document.addEventListener("click", e => { if (!e.target.closest(".popover") && !e.target.closest("#btn-model-trigger") && !e.target.closest("#btn-chat-more")) closePopovers(); });
   window.addEventListener("resize", () => setWorkMode(S.cfg.workMode, false));
@@ -3015,20 +3280,32 @@ function checkAtTrigger(v) {
   pop.classList.add("open");
 }
 function pickAt(id) { const ta = document.getElementById("prompt-in"); ta.value = ta.value.replace(/@[a-zA-Z0-9_-]*$/, ""); if (!S.skillIds.includes(id)) S.skillIds.push(id); document.getElementById("at-popup").classList.remove("open"); renderSkillStack(); renderChips(); ta.focus(); }
+const TOOL_CHIP_LABELS = {
+  plan: "Kế hoạch trước (/plan)",
+  office_pptx: "PowerPoint (.pptx)",
+  office_docx: "Word (.docx) / PDF",
+  office_xlsx: "Excel (.xlsx)",
+  office_pdf: "Tài liệu PDF",
+  image: "Tạo ảnh",
+  canvas: "Canvas",
+  web_search: "Tìm Web Live",
+  deep_research: "Deep Research",
+  guided: "Học có hướng dẫn"
+};
 function renderChips() {
   const c = [];
-  if (S.activeTool) c.push(`<span class="chip">${esc(S.activeTool)} <button onclick="S.activeTool=null;renderChips()">×</button></span>`);
-  if (S.activeNbId) { const n = S.notebooks.find(x => x.id === S.activeNbId); if (n) c.push(`<span class="chip">Ghi chú: ${esc(n.title)} <button onclick="S.activeNbId=null;renderChips();renderNbList()">×</button></span>`); }
+  if (S.activeTool) c.push(`<span class="chip">${esc(TOOL_CHIP_LABELS[S.activeTool] || S.activeTool)} <button type="button" onclick="S.activeTool=null;renderChips()">×</button></span>`);
+  if (S.activeNbId) { const n = S.notebooks.find(x => x.id === S.activeNbId); if (n) c.push(`<span class="chip">Ghi chú: ${esc(n.title)} <button type="button" onclick="S.activeNbId=null;renderChips();renderNbList()">×</button></span>`); }
   S.atts.forEach((a, i) => {
-    if (a.dataUrl) c.push(`<span class="chip"><img src="${a.dataUrl}" onclick="openVisionStudio(${i})" /><span>${esc(a.name.slice(0, 14))}</span> <span class="edit-tag" onclick="openVisionStudio(${i})">${a.enhanced ? "Đã nét" : "Soi / Nét"}</span> <button onclick="S.atts.splice(${i},1);renderChips();updateOrbButton()">×</button></span>`);
-    else c.push(`<span class="chip">${esc(a.name.slice(0, 18))} <button onclick="S.atts.splice(${i},1);renderChips();updateOrbButton()">×</button></span>`);
+    if (a.dataUrl) c.push(`<span class="chip"><img src="${a.dataUrl}" onclick="openVisionStudio(${i})" /><span>${esc(a.name.slice(0, 12))}</span> <span class="edit-tag" onclick="openVisionStudio(${i})">${a.enhanced ? "Đã nét" : "Soi/Nét"}</span> <span class="edit-tag" onclick="triggerUiFromScreenshot(${i})">Dựng UI</span> <button type="button" onclick="S.atts.splice(${i},1);renderChips();updateOrbButton()">×</button></span>`);
+    else c.push(`<span class="chip">${esc(a.name.slice(0, 18))} <button type="button" onclick="S.atts.splice(${i},1);renderChips();updateOrbButton()">×</button></span>`);
   });
   document.getElementById("chips-bar").innerHTML = c.join("");
 }
 
 function openModal(html) { document.getElementById("modal-box").innerHTML = html; document.getElementById("modal-bg").classList.add("open"); }
 function closeModal() { document.getElementById("modal-bg").classList.remove("open"); }
-function openLightbox(src) { openModal(`<img src="${src}" style="width:100%;border-radius:14px;margin-bottom:10px;"/><div style="display:flex;justify-content:flex-end;gap:8px;"><a class="btn-s tap" href="${src}" download="apiai-hd.jpg" style="text-decoration:none;">Tải ảnh</a><button class="btn-p tap" onclick="closeModal()">Đóng</button></div>`); }
+function openLightbox(src, fileName = "api-ai-image.png") { window.__LB_SRC__ = src; window.__LB_NAME__ = fileName; openModal(`<img src="${src}" style="width:100%;max-height:66dvh;object-fit:contain;border-radius:14px;margin-bottom:10px;background:var(--surface-0);"/><div style="display:flex;justify-content:flex-end;gap:8px;"><button type="button" class="btn-s tap" onclick="downloadDataUrlWithName(window.__LB_SRC__, window.__LB_NAME__)">Lưu ${esc(fileName)}</button><button type="button" class="btn-p tap" onclick="closeModal()">Đóng</button></div>`); }
 let tTimer = null;
 function showToast(msg, kind = null) {
   const t = document.getElementById("toast"), dot = document.getElementById("toast-dot");
@@ -4747,19 +5024,23 @@ async function regenerateReply(aiMsgId) {
   await sendPrompt(prevUser.text, { reuseLastUser: true });
 }
 
-function exportMsgFile(msgId, fmt) {
+async function exportMsgFile(msgId, fmt) {
   const txt = getMsgText(msgId);
   if (!txt) return showToast("Không có nội dung để xuất");
-  const content = fmt === "html"
-    ? `<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><title>API AI Export</title><style>body{font-family:-apple-system,sans-serif;max-width:760px;margin:32px auto;padding:0 16px;line-height:1.65;color:#111}pre{background:#f3f4f6;padding:12px;border-radius:8px;overflow:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}</style></head><body>${renderMd(txt)}</body></html>`
-    : txt;
-  const blob = new Blob([content], { type: fmt === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8" });
+  if (fmt === "pdf" && window.OfficeStudio?.exportPdf) {
+    const rawHtml = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:24px 28px;color:#111827;background:#ffffff;line-height:1.65;">${renderMd(txt)}</div>`;
+    return window.OfficeStudio.exportPdf({ kind: "pdf", title: "API-AI-Export", rawHtml }, "open");
+  }
+  const blob = new Blob([txt], { type: "text/markdown;charset=utf-8" });
+  if (window.OfficeStudio?.deliverBinaryFile) {
+    return window.OfficeStudio.deliverBinaryFile(blob, `api-ai-export-${Date.now()}.md`, "text/markdown", "save");
+  }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `api-ai-export-${Date.now()}.${fmt}`;
+  a.download = `api-ai-export-${Date.now()}.md`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  haptic("ok"); showToast(`Đã xuất file .${fmt}`, "ok");
+  haptic("ok"); showToast("Đã xuất file .md", "ok");
 }
 
 function adminBonusTokensModal(email, curBonus) {
@@ -4786,6 +5067,348 @@ async function commitAdminBonusTokens(email) {
   closeModal(); haptic("ok");
   showToast(`Đã cộng +${amount.toLocaleString("vi-VN")} token cho ${email}`, "ok");
   loadAdminData();
+}
+
+
+
+/* =========================================================================
+   v3.5 MODULE: SLASH COMMANDS (/new /compact GPT 6.2 Astra /plan), CLIPBOARD PASTE, UI-FROM-IMAGE & OFFICE STUDIO BRIDGE
+   ========================================================================= */
+window.apiFetch = apiFetch;
+window.haptic = haptic;
+window.showToast = showToast;
+window.openModal = openModal;
+window.closeModal = closeModal;
+
+const SLASH_COMMANDS = [
+  { cmd: "/new", desc: "Mở phiên trò chuyện mới sạch sẽ", instant: true },
+  { cmd: "/compact", desc: "Nén & tóm tắt lịch sử phiên bằng GPT 6.2 Astra (tiết kiệm ~75% token)", instant: true },
+  { cmd: "/plan", desc: "Lập kế hoạch trước, khóa sửa code (duyệt xong mới làm)", instant: false },
+  { cmd: "/slide", desc: "Tạo bài thuyết trình PowerPoint (.pptx) kèm hiệu ứng & trình chiếu", instant: false },
+  { cmd: "/doc", desc: "Tạo tài liệu Word (.docx) chuẩn định dạng & xuất PDF", instant: false },
+  { cmd: "/excel", desc: "Tạo bảng tính Excel (.xlsx) có công thức tính toán", instant: false },
+  { cmd: "/pdf", desc: "Tạo và xuất tài liệu PDF chuẩn in", instant: false },
+  { cmd: "/img", desc: "Vẽ ảnh tùy kích thước (vd: 1536x1024 banner.png dựa theo logo.png)", instant: false }
+];
+
+let slashSelIdx = 0;
+function checkSlashTrigger(val) {
+  const pop = document.getElementById("slash-popup");
+  if (!pop) return;
+  const m = String(val || "").match(/^\/([a-z0-9_-]*)$/i);
+  if (!m) { pop.classList.remove("open"); return; }
+  const q = m[1].toLowerCase();
+  const list = SLASH_COMMANDS.filter(c => c.cmd.slice(1).includes(q));
+  if (!list.length) { pop.classList.remove("open"); return; }
+  slashSelIdx = Math.min(slashSelIdx, list.length - 1);
+  pop.innerHTML = list.map((c, i) => `
+    <button type="button" class="drop-opt tap-soft ${i===slashSelIdx?"selected":""}" onclick="pickSlashCommand('${c.cmd}',${c.instant})">
+      <span class="slash-keycap">${esc(c.cmd)}</span>
+      <div class="opt-main"><div class="opt-sub" style="margin:0;color:var(--ink-2);">${esc(c.desc)}</div></div>
+    </button>`).join("");
+  pop.classList.add("open");
+}
+
+function handleSlashKeydown(e) {
+  const pop = document.getElementById("slash-popup");
+  if (!pop?.classList.contains("open")) return false;
+  const btns = [...pop.querySelectorAll(".drop-opt")];
+  if (!btns.length) return false;
+  if (e.key === "ArrowDown") { e.preventDefault(); slashSelIdx = (slashSelIdx + 1) % btns.length; btns.forEach((b, i) => b.classList.toggle("selected", i === slashSelIdx)); return true; }
+  if (e.key === "ArrowUp") { e.preventDefault(); slashSelIdx = (slashSelIdx - 1 + btns.length) % btns.length; btns.forEach((b, i) => b.classList.toggle("selected", i === slashSelIdx)); return true; }
+  if (e.key === "Escape") { pop.classList.remove("open"); return true; }
+  if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); btns[slashSelIdx]?.click(); return true; }
+  return false;
+}
+
+function pickSlashCommand(cmd, instant) {
+  const ta = document.getElementById("prompt-in");
+  document.getElementById("slash-popup")?.classList.remove("open");
+  haptic("tap");
+  if (instant) {
+    ta.value = ""; autoGrow(); updateOrbButton();
+    if (cmd === "/new") { startNewChat(); showToast("Đã mở phiên trò chuyện mới", "ok"); }
+    else if (cmd === "/compact") { runCompactSession(); }
+    return;
+  }
+  const map = { "/plan": "plan", "/slide": "office_pptx", "/doc": "office_docx", "/excel": "office_xlsx", "/pdf": "office_pdf", "/img": "image" };
+  if (map[cmd]) {
+    S.activeTool = map[cmd];
+    renderChips();
+    ta.value = ""; autoGrow(); updateOrbButton(); ta.focus();
+    showToast(`Đã bật ${TOOL_CHIP_LABELS[map[cmd]] || cmd} · Nhập yêu cầu của bạn`);
+  }
+}
+
+async function runCompactSession() {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  if (!chat || (chat.messages || []).length < 2) {
+    return showToast("Phiên hiện tại còn ngắn, chưa cần nén (/compact)", "warn");
+  }
+  const astraAllowed = S.user?.role === "admin" || S.models.some(m => m.id === "gpt-6.2-astra" && m.allowed);
+  const compactModelId = astraAllowed ? "gpt-6.2-astra" : "gpt-6.2-sol";
+  showToast(`Đang nén ngữ cảnh phiên bằng ${astraAllowed ? "GPT 6.2 Astra" : "GPT 6.2 Sol"}...`);
+
+  const transcript = (chat.compactSummary ? `[BẢN NÉN TRƯỚC ĐÓ]\n${chat.compactSummary}\n\n` : "")
+    + (chat.messages || []).slice(chat.compactedUpToIndex || 0)
+      .filter(m => !m.failedSwitch && m.text)
+      .map(m => `${m.role === "user" ? "Người dùng" : "API AI"}: ${m.text.slice(0, 1400)}`)
+      .join("\n\n");
+
+  try {
+    const r = await apiFetch("/ai/digest", {
+      method: "POST",
+      body: {
+        digestMode: "compact_chat",
+        readerModelId: compactModelId,
+        instruction: "Nén toàn bộ cuộc trò chuyện dự án này thành bản ghi nhớ ngắn gọn nhưng giữ đủ 100% quyết định, tên file, hàm, lỗi đã sửa và bước kế tiếp.",
+        content: transcript.slice(0, 26000)
+      }
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Không thể nén ngữ cảnh");
+    chat.compactSummary = d.digest || "";
+    chat.compactedUpToIndex = chat.messages.length;
+    chat.compactedBy = d.readerModel || "GPT 6.2 Astra";
+    chat.compactedAt = Date.now();
+    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+    renderMessages(); haptic("ok");
+    showToast(`Đã nén ${chat.messages.length} tin bằng ${chat.compactedBy} · Làm tiếp ngay không cần giải thích lại!`, "ok");
+  } catch (e) {
+    haptic("err"); showToast("Lỗi /compact: " + e.message, "err");
+  }
+}
+
+function buildCompactSummaryCard(chat) {
+  if (!chat?.compactSummary) return "";
+  return `<div class="compact-summary-card">
+    <button type="button" class="compact-head tap-soft" onclick="toggleAcc('cmp-acc','cmp-chv')">
+      <span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">
+        <span class="slash-keycap">/compact</span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Đã nén ${Number(chat.compactedUpToIndex || 0)} tin bằng <b>${esc(chat.compactedBy || "GPT 6.2 Astra")}</b></span>
+      </span>
+      <span id="cmp-chv" class="chev"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </button>
+    <div id="cmp-acc" class="acc-wrap">
+      <div class="acc-inner"><div class="compact-body md">${renderMd(chat.compactSummary)}
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+          <button type="button" class="btn-s tap" style="height:28px;font-size:11.5px;padding:0 10px;" onclick="clearChatCompact()">Gỡ bản nén</button>
+        </div>
+      </div></div>
+    </div>
+  </div>`;
+}
+function clearChatCompact() {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  if (!chat) return;
+  delete chat.compactSummary; delete chat.compactedUpToIndex;
+  apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+  renderMessages(); showToast("Đã gỡ bản nén ngữ cảnh");
+}
+
+function approvePlanAndExecute(msgId) {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const msg = chat?.messages.find(m => m.id === msgId);
+  if (msg) msg.isPlanLock = false;
+  haptic("ok");
+  sendPrompt("Tôi đã duyệt kế hoạch trên. Hãy bắt đầu triển khai đầy đủ theo đúng kế hoạch đã chốt.");
+}
+function refinePlanPrompt() {
+  const ta = document.getElementById("prompt-in");
+  S.activeTool = "plan"; renderChips();
+  ta.value = "Điều chỉnh lại kế hoạch ở bước: ";
+  autoGrow(); updateOrbButton(); ta.focus();
+}
+
+async function pasteImageFromClipboard() {
+  try {
+    if (!navigator.clipboard?.read) throw new Error("Trình duyệt chưa hỗ trợ đọc ảnh Clipboard trực tiếp");
+    const items = await navigator.clipboard.read();
+    const files = [];
+    for (const item of items) {
+      const imgType = item.types.find(t => t.startsWith("image/"));
+      if (imgType) {
+        const blob = await item.getType(imgType);
+        files.push(new File([blob], `screenshot-${Date.now().toString(36)}.png`, { type: imgType }));
+      }
+    }
+    if (!files.length) return showToast("Clipboard hiện không có ảnh nào. Bạn có thể chọn Ảnh HD hoặc bấm Dán trong khung nhập.", "warn");
+    await handleImages(files);
+  } catch (e) {
+    showToast("Bấm giữ ô nhập tin nhắn và chọn Dán (hoặc chọn Ảnh HD)", "warn");
+  }
+}
+
+function triggerUiFromScreenshot(idx) {
+  haptic("ok");
+  ["builtin-hallmark", "builtin-unslop"].forEach(id => {
+    if (S.skills.some(s => s.id === id) && !S.skillIds.includes(id)) S.skillIds.push(id);
+  });
+  S.activeTool = "canvas";
+  renderSkillStack(); renderChips();
+  const ta = document.getElementById("prompt-in");
+  if (!ta.value.trim()) {
+    ta.value = "Nhìn kỹ ảnh chụp màn hình đính kèm: hãy sửa lỗi giao diện hoặc dựng lại trọn bộ giao diện đẹp, sắc nét, đúng bố cục và xuất toàn bộ trong 1 khối ```html để xem trực tiếp trong Canvas.";
+    autoGrow(); updateOrbButton();
+  }
+  showToast("Đã bật chế độ Dựng UI từ ảnh + Canvas · Bấm Gửi ngay!", "ok");
+  ta.focus();
+}
+
+async function downloadDataUrlWithName(dataUrl, fileName) {
+  if (!dataUrl) return;
+  try {
+    const r = await fetch(dataUrl);
+    const blob = await r.blob();
+    const mime = blob.type || "image/png";
+    if (window.OfficeStudio?.deliverBinaryFile) {
+      await window.OfficeStudio.deliverBinaryFile(blob, fileName || "api-ai-image.png", mime, "save");
+    } else {
+      const a = document.createElement("a"); a.href = dataUrl; a.download = fileName || "api-ai-image.png"; a.click();
+    }
+  } catch (e) { showToast("Không lưu được ảnh: " + e.message, "err"); }
+}
+function saveGeneratedImageFile(msgId) {
+  const m = S.chats.find(c => c.id === S.activeChatId)?.messages.find(x => x.id === msgId);
+  if (!m?.genImg) return;
+  downloadDataUrlWithName(m.genImg, m.downloadName || "api-ai-image.png");
+}
+
+/* ===== OFFICE STUDIO BRIDGE (PPTX / DOCX / XLSX / PDF) ===== */
+const officePayloadMap = new Map();
+
+function canUseOfficeStudio() {
+  if (S.user?.role === "admin") return true;
+  if (typeof S.user?.limits?.allow_office_studio === "boolean") return S.user.limits.allow_office_studio;
+  return ["pro", "pro_max", "ultra"].includes(S.user?.keyTier);
+}
+
+function detectOfficeIntent(query, activeTool) {
+  if (activeTool === "office_pptx") return "pptx";
+  if (activeTool === "office_docx") return "docx";
+  if (activeTool === "office_xlsx") return "xlsx";
+  if (activeTool === "office_pdf") return "pdf";
+  const t = String(query || "").toLowerCase();
+  if (/(tạo|làm|thiết kế|xuất|dựng)\s+(giúp\s+|cho\s+(mình|tôi|em)\s+)?.*(slide|powerpoint|pptx|bài thuyết trình)/i.test(t)) return "pptx";
+  if (/(tạo|làm|viết|xuất)\s+(giúp\s+|cho\s+(mình|tôi|em)\s+)?.*(file\s+word|tài liệu\s+word|\.docx|báo cáo\s+word)/i.test(t)) return "docx";
+  if (/(tạo|làm|xuất)\s+(giúp\s+|cho\s+(mình|tôi|em)\s+)?.*(file\s+excel|bảng tính\s+excel|\.xlsx|sheet\s+excel)/i.test(t)) return "xlsx";
+  if (/(tạo|làm|xuất)\s+(giúp\s+|cho\s+(mình|tôi|em)\s+)?.*(file\s+pdf|\.pdf|tài liệu\s+pdf)/i.test(t)) return "pdf";
+  return null;
+}
+
+function buildOfficeSystemDirective(kind) {
+  if (kind === "pptx") {
+    return `CHẾ ĐỘ OFFICE STUDIO — POWERPOINT (.PPTX) ĐỈNH CAO:
+Sau phần giới thiệu ngắn gọn (2-3 dòng), BẮT BUỘC xuất ĐÚNG 1 khối JSON chuẩn đặt trong ${"`".repeat(3)}apiai-office ... ${"`".repeat(3)} theo cấu trúc:
+{"kind":"pptx","title":"Tên bài thuyết trình","fileName":"ten-file.pptx","theme":"obsidian-cobalt|warm-editorial|nordic-slate|midnight-gold","transition":"morph|3d|push|fade","slides":[{"layout":"cover","kicker":"Nhãn ngắn","title":"Tiêu đề lớn","subtitle":"Phụ đề sắc sảo","meta":"Tác giả / Thời gian","imagePrompt":"Mô tả tiếng Anh ngắn gọn để vẽ ảnh minh họa nếu cần","notes":"Lời thuyết trình"},{"layout":"kpi_grid","title":"Số liệu nổi bật","kpis":[{"label":"Chỉ số","value":"94%","delta":"+12% so với kỳ trước"}],"bullets":["Nhận định chính"]},{"layout":"two_col","title":"...","bullets":["Ý 1","Ý 2"],"rightTitle":"Điểm nhấn","rightBullets":["Ý A","Ý B"]},{"layout":"timeline","title":"Lộ trình","steps":[{"phase":"Giai đoạn 1","title":"...","desc":"..."}]},{"layout":"chart","title":"Biểu đồ","chart":{"type":"bar|line|pie|doughnut","labels":["Q1","Q2","Q3","Q4"],"series":[{"name":"Doanh thu","values":[12,18,24,31]}]},"bullets":["Kết luận từ biểu đồ"]},{"layout":"table","title":"Bảng so sánh","table":{"headers":["Hạng mục","Giá trị","Ghi chú"],"rows":[["A","100","Tốt"]]}},{"layout":"quote","quote":"Câu trích dẫn đắt giá","author":"Nguồn"},{"layout":"closing","title":"Tổng kết","subtitle":"Cảm ơn đã lắng nghe","bullets":["Hành động 1","Hành động 2"]}]}
+YÊU CẦU CHẤT LƯỢNG: Tạo 6-10 slide, phối ĐA DẠNG bố cục (cover, kpi_grid, two_col, timeline, chart, table, closing), nội dung cô đọng sắc sảo không nhồi chữ, JSON hợp lệ 100% không comment.`;
+  }
+  if (kind === "xlsx") {
+    return `CHẾ ĐỘ OFFICE STUDIO — EXCEL (.XLSX) CHUYÊN NGHIỆP:
+Sau phần giải thích ngắn, BẮT BUỘC xuất ĐÚNG 1 khối JSON chuẩn đặt trong ${"`".repeat(3)}apiai-office ... ${"`".repeat(3)}:
+{"kind":"xlsx","title":"Tên bảng tính","fileName":"bang-tinh.xlsx","sheets":[{"name":"TongQuan","title":"Tiêu đề sheet","headers":["Cột 1","Số lượng","Đơn giá","Thành tiền"],"rows":[["Sản phẩm A",10,50000,"=B3*C3"],["Sản phẩm B",5,120000,"=B4*C4"],["Tổng cộng","=SUM(B3:B4)","","=SUM(D3:D4)"]]}]}
+LƯU Ý QUAN TRỌNG: Dữ liệu hàng đầu tiên luôn nằm ở dòng Excel số 3 (vì dòng 1 là Title Banner, dòng 2 là Header). Hãy viết công thức Excel thật bắt đầu bằng dấu "=" đúng tọa độ dòng 3 trở đi! JSON hợp lệ 100%.`;
+  }
+  const targetKind = kind === "pdf" ? "pdf" : "docx";
+  return `CHẾ ĐỘ OFFICE STUDIO — TÀI LIỆU ${targetKind.toUpperCase()} CHUYÊN NGHIỆP:
+Sau lời mở đầu ngắn, BẮT BUỘC xuất ĐÚNG 1 khối JSON chuẩn đặt trong ${"`".repeat(3)}apiai-office ... ${"`".repeat(3)}:
+{"kind":"${targetKind}","title":"Tiêu đề tài liệu","subtitle":"Phụ đề / Đơn vị","fileName":"tai-lieu.${targetKind}","summary":"Đoạn tóm tắt điều hành nổi bật","sections":[{"heading":"1. Mục lớn","level":1,"paragraphs":["Đoạn phân tích sâu..."],"bullets":["Ý quan trọng 1","Ý quan trọng 2"],"callout":"Ghi chú/Nhấn mạnh quan trọng","table":{"headers":["Cột 1","Cột 2"],"rows":[["Dữ liệu 1","Dữ liệu 2"]]}}]}
+YÊU CẦU: Trình bày mạch lạc, chuyên sâu, có bảng biểu khi phù hợp, JSON hợp lệ 100% không comment.`;
+}
+
+function renderOfficeArtifactCard(rawJson) {
+  let obj = null;
+  try { obj = JSON.parse(rawJson.trim()); } catch { return ""; }
+  if (!obj || !["pptx", "docx", "xlsx", "pdf"].includes(String(obj.kind || "").toLowerCase())) return "";
+  obj.kind = String(obj.kind).toLowerCase();
+  const oid = "off-" + (++cbSeq);
+  officePayloadMap.set(oid, obj);
+
+  const badgeMap = { pptx: "POWERPOINT .PPTX", docx: "WORD .DOCX", xlsx: "EXCEL .XLSX", pdf: "TÀI LIỆU .PDF" };
+  let metaLine = "";
+  let miniStrip = "";
+
+  if (obj.kind === "pptx") {
+    const slides = Array.isArray(obj.slides) ? obj.slides : [];
+    const thName = window.OfficeStudio?.THEMES?.[obj.theme]?.name || "Obsidian Cobalt";
+    metaLine = `${slides.length} slide · Chủ đề ${thName} · Hiệu ứng ${(obj.transition || "morph").toUpperCase()}`;
+    miniStrip = `<div class="office-slide-strip">${slides.slice(0, 10).map((s, i) => `
+      <div class="office-slide-mini tap-soft" onclick="openOfficeArtifact('${oid}','play',${i})">
+        <span class="num" style="color:var(--accent-ink);">Slide ${i + 1} · ${esc(s.layout || "two_col")}</span>
+        <strong>${esc(s.title || "Slide " + (i + 1))}</strong>
+      </div>`).join("")}</div>`;
+  } else if (obj.kind === "xlsx") {
+    const sheets = Array.isArray(obj.sheets) ? obj.sheets : [];
+    metaLine = `${sheets.length || 1} trang tính (Sheet) · Có định dạng & công thức Excel`;
+  } else {
+    const secs = Array.isArray(obj.sections) ? obj.sections : [];
+    metaLine = `${secs.length} chương mục · Chuẩn in & chỉnh sửa Office`;
+  }
+
+  return `<div class="office-card">
+    <div class="office-card-head">
+      <div style="min-width:0;flex:1;">
+        <span class="tag-st tier-pro">${badgeMap[obj.kind]}</span>
+        <div style="font-size:15.5px;font-weight:520;margin-top:6px;line-height:1.3;">${esc(obj.title || "Tài liệu Office")}</div>
+        <div style="font-size:12.5px;color:var(--ink-2);margin-top:3px;">${esc(metaLine)}</div>
+      </div>
+    </div>
+    ${miniStrip}
+    <div class="office-card-acts">
+      ${obj.kind === "pptx" ? `<button type="button" class="btn-p tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','play')">Trình chiếu hiệu ứng</button>` : `<button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','preview')">Xem trước</button>`}
+      ${obj.kind === "pptx" ? `<button type="button" class="btn-blue tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','pptx')">Mở / Tải .pptx</button>` : ""}
+      ${obj.kind === "docx" ? `<button type="button" class="btn-blue tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','docx')">Mở / Tải .docx</button>` : ""}
+      ${obj.kind === "xlsx" ? `<button type="button" class="btn-blue tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','xlsx')">Mở / Tải .xlsx</button>` : ""}
+      <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','pdf')">Xuất .pdf</button>
+      ${obj.kind === "pptx" ? `<button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','visuals')">Vẽ ảnh Slide</button>` : ""}
+      <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="openOfficeArtifact('${oid}','save')">Lưu Thư viện</button>
+    </div>
+  </div>`;
+}
+
+async function openOfficeArtifact(oid, action, slideIdx = 0) {
+  const spec = officePayloadMap.get(oid);
+  if (!spec || !window.OfficeStudio) return showToast("Không tìm thấy dữ liệu Office", "err");
+  if (!canUseOfficeStudio() && action !== "preview") {
+    return showToast("Office Studio yêu cầu Key hạng Pro trở lên", "warn");
+  }
+  try {
+    if (action === "play") { window.OfficeStudio.openPlayer(spec); if (slideIdx > 0) window.OfficeStudio.jumpSlide(slideIdx); }
+    else if (action === "preview") window.OfficeStudio.openPreview(spec);
+    else if (action === "pptx") await window.OfficeStudio.exportPptx(spec, "open");
+    else if (action === "docx") await window.OfficeStudio.exportDocx(spec, "open");
+    else if (action === "xlsx") await window.OfficeStudio.exportXlsx(spec, "open");
+    else if (action === "pdf") await window.OfficeStudio.exportPdf(spec, "open");
+    else if (action === "visuals") await window.OfficeStudio.generateSlideVisuals(spec);
+    else if (action === "save") await saveOfficeSpecToLibrary(spec);
+  } catch (e) {
+    haptic("err"); showToast("Lỗi xuất Office: " + e.message, "err");
+  }
+}
+
+async function saveOfficeSpecToLibrary(spec) {
+  if (!spec) return;
+  const it = {
+    id: "offlib-" + Date.now() + Math.random().toString(36).slice(2, 5),
+    type: "office",
+    officeKind: spec.kind || "pptx",
+    title: spec.title || "Tài liệu Office",
+    data: JSON.stringify(spec),
+    createdAt: Date.now()
+  };
+  await dbPut("library", it);
+  S.library.unshift(it);
+  haptic("ok"); showToast(`Đã lưu "${it.title}" vào Thư viện`, "ok");
+}
+
+function openSavedOfficeFromLib(libId) {
+  const item = S.library.find(x => x.id === libId);
+  if (!item?.data) return;
+  try {
+    const spec = JSON.parse(item.data);
+    if (spec.kind === "pptx") window.OfficeStudio?.openPlayer(spec);
+    else window.OfficeStudio?.openPreview(spec);
+  } catch { showToast("Không mở được tệp đã lưu", "err"); }
 }
 
 boot();
