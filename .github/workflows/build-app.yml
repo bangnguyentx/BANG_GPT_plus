@@ -613,8 +613,7 @@ jobs:
           if (fs.existsSync(fpPath)) {
             let fpx = fs.readFileSync(fpPath, "utf8");
             if (!fpx.includes("apiai_exports")) {
-              fpx = fpx.replace("</paths>", '    <cache-path name="apiai_exports" path="apiai_exports/" />
-</paths>');
+              fpx = fpx.replace("</paths>", '    <cache-path name="apiai_exports" path="apiai_exports/" />\n</paths>');
               fs.writeFileSync(fpPath, fpx);
             }
           }
