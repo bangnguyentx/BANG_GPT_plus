@@ -1,4 +1,4 @@
-name: Build & Release Android APK (API AI)
+name: Build & Release Android APK (API AI v3.3)
 
 on:
   push:
@@ -37,8 +37,9 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-apiai-cap6-${{ hashFiles('capacitor.config.json', '.github/workflows/build-app.yml') }}
+          key: gradle-apiai-cap6-v33-${{ hashFiles('capacitor.config.json', '.github/workflows/build-app.yml') }}
           restore-keys: |
+            gradle-apiai-cap6-v33-
             gradle-apiai-cap6-
 
       - name: Chuẩn bị www và cài Capacitor 6
@@ -88,6 +89,347 @@ jobs:
           npm init -y
           npm install @capacitor/core@6.2.0 @capacitor/cli@6.2.0 @capacitor/android@6.2.0
           npx cap add android
+
+      - name: Tích hợp Native Android Foreground Service & Thông báo nền (1B + 7.2B)
+        run: |
+          node << 'EOF'
+          const fs = require("fs");
+          const path = require("path");
+          const pkgDir = "android/app/src/main/java/com/bang/chatgpt";
+          fs.mkdirSync(pkgDir, { recursive: true });
+
+          const serviceJava = `package com.bang.chatgpt;
+
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.app.Service;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.pm.ServiceInfo;
+          import android.net.wifi.WifiManager;
+          import android.os.Build;
+          import android.os.IBinder;
+          import android.os.PowerManager;
+          import androidx.core.app.NotificationCompat;
+
+          public class ApiAiKeepAliveService extends Service {
+              public static final String CHANNEL_RUNNING = "apiai_running";
+              public static final int NOTIF_ID = 3301;
+              private PowerManager.WakeLock wakeLock;
+              private WifiManager.WifiLock wifiLock;
+
+              @Override
+              public void onCreate() {
+                  super.onCreate();
+                  createChannels(this);
+                  PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                  if (pm != null) {
+                      wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "APIAI::BackgroundTaskLock");
+                      wakeLock.setReferenceCounted(false);
+                      wakeLock.acquire(20 * 60 * 1000L);
+                  }
+                  WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                  if (wm != null) {
+                      wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "APIAI::WifiKeepAlive");
+                      wifiLock.setReferenceCounted(false);
+                      wifiLock.acquire();
+                  }
+              }
+
+              @Override
+              public int onStartCommand(Intent intent, int flags, int startId) {
+                  if (intent != null && "STOP".equals(intent.getAction())) {
+                      releaseLocks();
+                      stopForeground(true);
+                      stopSelf();
+                      return START_NOT_STICKY;
+                  }
+                  String title = intent != null && intent.getStringExtra("title") != null
+                      ? intent.getStringExtra("title") : "API AI đang xử lý ngầm";
+                  String body = intent != null && intent.getStringExtra("body") != null
+                      ? intent.getStringExtra("body") : "Đang giữ kết nối để hoàn tất tác vụ của bạn...";
+
+                  Intent openIntent = new Intent(this, MainActivity.class);
+                  openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                  PendingIntent pi = PendingIntent.getActivity(
+                      this, 0, openIntent,
+                      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                  );
+
+                  Notification notif = new NotificationCompat.Builder(this, CHANNEL_RUNNING)
+                      .setContentTitle(title)
+                      .setContentText(body)
+                      .setSmallIcon(android.R.drawable.stat_notify_sync)
+                      .setOngoing(true)
+                      .setOnlyAlertOnce(true)
+                      .setPriority(NotificationCompat.PRIORITY_LOW)
+                      .setContentIntent(pi)
+                      .build();
+
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                      startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                  } else {
+                      startForeground(NOTIF_ID, notif);
+                  }
+                  return START_STICKY;
+              }
+
+              @Override
+              public void onTaskRemoved(Intent rootIntent) {
+                  // Stop background execution immediately ONLY when user swipes app out of Recents multitasking
+                  releaseLocks();
+                  stopForeground(true);
+                  stopSelf();
+                  super.onTaskRemoved(rootIntent);
+              }
+
+              @Override
+              public void onDestroy() {
+                  releaseLocks();
+                  super.onDestroy();
+              }
+
+              private void releaseLocks() {
+                  try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
+                  try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Exception ignored) {}
+              }
+
+              @Override
+              public IBinder onBind(Intent intent) { return null; }
+
+              public static void createChannels(Context ctx) {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                      if (nm == null) return;
+                      NotificationChannel chRun = new NotificationChannel(
+                          CHANNEL_RUNNING, "Tác vụ nền API AI", NotificationManager.IMPORTANCE_LOW
+                      );
+                      chRun.setDescription("Giữ kết nối khi AI đang trả lời hoặc chạy đội ngũ");
+                      nm.createNotificationChannel(chRun);
+
+                      NotificationChannel chDone = new NotificationChannel(
+                          "apiai_alerts", "Thông báo hoàn tất & Gia sư AI", NotificationManager.IMPORTANCE_HIGH
+                      );
+                      chDone.setDescription("Báo khi AI trả lời xong hoặc nhắc lịch học Gia sư");
+                      chDone.enableVibration(true);
+                      nm.createNotificationChannel(chDone);
+                  }
+              }
+          }
+          `;
+          fs.writeFileSync(path.join(pkgDir, "ApiAiKeepAliveService.java"), serviceJava);
+
+          const receiverJava = `package com.bang.chatgpt;
+
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import androidx.core.app.NotificationCompat;
+
+          public class ApiAiTutorAlarmReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  ApiAiKeepAliveService.createChannels(context);
+                  String tutorId = intent.getStringExtra("tutorId");
+                  String title = intent.getStringExtra("title");
+                  String body = intent.getStringExtra("body");
+                  if (title == null) title = "Gia sư AI nhắc lịch học";
+                  if (body == null) body = "Nay chưa vào học à? Bấm để bắt đầu bài học hôm nay!";
+
+                  Intent openIntent = new Intent(context, MainActivity.class);
+                  openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                  if (tutorId != null) openIntent.putExtra("openTutorId", tutorId);
+                  PendingIntent pi = PendingIntent.getActivity(
+                      context, (tutorId != null ? tutorId.hashCode() : 4401), openIntent,
+                      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                  );
+
+                  NotificationCompat.Builder b = new NotificationCompat.Builder(context, "apiai_alerts")
+                      .setSmallIcon(android.R.drawable.ic_dialog_info)
+                      .setContentTitle(title)
+                      .setContentText(body)
+                      .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                      .setPriority(NotificationCompat.PRIORITY_HIGH)
+                      .setAutoCancel(true)
+                      .setContentIntent(pi);
+
+                  NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                  if (nm != null) {
+                      nm.notify((tutorId != null ? tutorId.hashCode() : 4401), b.build());
+                  }
+              }
+          }
+          `;
+          fs.writeFileSync(path.join(pkgDir, "ApiAiTutorAlarmReceiver.java"), receiverJava);
+
+          const pluginJava = `package com.bang.chatgpt;
+
+          import android.Manifest;
+          import android.app.AlarmManager;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.app.NotificationCompat;
+          import androidx.core.content.ContextCompat;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+
+          @CapacitorPlugin(name = "ApiAiBackground")
+          public class ApiAiBackgroundPlugin extends Plugin {
+              @PluginMethod
+              public void requestNotifyPermission(PluginCall call) {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                      if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS)
+                          != PackageManager.PERMISSION_GRANTED) {
+                          ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.POST_NOTIFICATIONS}, 3302);
+                      }
+                  }
+                  call.resolve();
+              }
+
+              @PluginMethod
+              public void startTask(PluginCall call) {
+                  Context ctx = getContext();
+                  Intent it = new Intent(ctx, ApiAiKeepAliveService.class);
+                  it.putExtra("title", call.getString("title", "API AI đang xử lý"));
+                  it.putExtra("body", call.getString("body", "Đang giữ kết nối nền..."));
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      ctx.startForegroundService(it);
+                  } else {
+                      ctx.startService(it);
+                  }
+                  call.resolve();
+              }
+
+              @PluginMethod
+              public void stopTask(PluginCall call) {
+                  Context ctx = getContext();
+                  Intent it = new Intent(ctx, ApiAiKeepAliveService.class);
+                  it.setAction("STOP");
+                  try { ctx.startService(it); } catch (Exception ignored) {}
+                  call.resolve();
+              }
+
+              @PluginMethod
+              public void notifyDone(PluginCall call) {
+                  Context ctx = getContext();
+                  ApiAiKeepAliveService.createChannels(ctx);
+                  String title = call.getString("title", "API AI đã hoàn tất");
+                  String body = call.getString("body", "Bấm để xem kết quả chi tiết.");
+                  int id = call.getInt("id", (int) (System.currentTimeMillis() % 100000));
+
+                  Intent openIntent = new Intent(ctx, MainActivity.class);
+                  openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                  PendingIntent pi = PendingIntent.getActivity(
+                      ctx, id, openIntent,
+                      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                  );
+
+                  NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, "apiai_alerts")
+                      .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                      .setContentTitle(title)
+                      .setContentText(body)
+                      .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                      .setPriority(NotificationCompat.PRIORITY_HIGH)
+                      .setAutoCancel(true)
+                      .setContentIntent(pi);
+
+                  NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                  if (nm != null) nm.notify(id, b.build());
+                  call.resolve();
+              }
+
+              @PluginMethod
+              public void scheduleTutorReminder(PluginCall call) {
+                  Context ctx = getContext();
+                  String tutorId = call.getString("tutorId", "tutor");
+                  String title = call.getString("title", "Gia sư AI nhắc lịch học");
+                  String body = call.getString("body", "Nay chưa vào học à?");
+                  long triggerAt = call.getLong("triggerAtMs", System.currentTimeMillis() + 3600000L);
+
+                  AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+                  if (am != null) {
+                      Intent it = new Intent(ctx, ApiAiTutorAlarmReceiver.class);
+                      it.putExtra("tutorId", tutorId);
+                      it.putExtra("title", title);
+                      it.putExtra("body", body);
+                      PendingIntent pi = PendingIntent.getBroadcast(
+                          ctx, tutorId.hashCode(), it,
+                          PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                      );
+                      am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                  }
+                  call.resolve();
+              }
+
+              @PluginMethod
+              public void cancelTutorReminder(PluginCall call) {
+                  Context ctx = getContext();
+                  String tutorId = call.getString("tutorId", "tutor");
+                  AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+                  if (am != null) {
+                      Intent it = new Intent(ctx, ApiAiTutorAlarmReceiver.class);
+                      PendingIntent pi = PendingIntent.getBroadcast(
+                          ctx, tutorId.hashCode(), it,
+                          PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                      );
+                      am.cancel(pi);
+                  }
+                  call.resolve();
+              }
+          }
+          `;
+          fs.writeFileSync(path.join(pkgDir, "ApiAiBackgroundPlugin.java"), pluginJava);
+
+          const mainActJava = `package com.bang.chatgpt;
+
+          import android.content.Intent;
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  registerPlugin(ApiAiBackgroundPlugin.class);
+                  super.onCreate(savedInstanceState);
+                  dispatchTutorIntent(getIntent());
+              }
+
+              @Override
+              protected void onNewIntent(Intent intent) {
+                  super.onNewIntent(intent);
+                  setIntent(intent);
+                  dispatchTutorIntent(intent);
+              }
+
+              private void dispatchTutorIntent(Intent intent) {
+                  if (intent != null && intent.hasExtra("openTutorId")) {
+                      final String tid = intent.getStringExtra("openTutorId");
+                      if (tid != null && getBridge() != null && getBridge().getWebView() != null) {
+                          getBridge().getWebView().postDelayed(() -> {
+                              getBridge().getWebView().evaluateJavascript(
+                                  "window.__OPEN_TUTOR_FROM_NOTIF__ && window.__OPEN_TUTOR_FROM_NOTIF__(" + org.json.JSONObject.quote(tid) + ");",
+                                  null
+                              );
+                          }, 800);
+                      }
+                  }
+              }
+          }
+          `;
+          fs.writeFileSync(path.join(pkgDir, "MainActivity.java"), mainActJava);
+          console.log("Injected Native Android Background Service + Tutor Alarm Plugin.");
+          EOF
 
       - name: Thay toàn bộ Icon App Android bằng logo.png
         run: |
@@ -152,7 +494,12 @@ jobs:
             "android.permission.RECORD_AUDIO",
             "android.permission.CAMERA",
             "android.permission.MODIFY_AUDIO_SETTINGS",
-            "android.permission.VIBRATE"
+            "android.permission.VIBRATE",
+            "android.permission.WAKE_LOCK",
+            "android.permission.FOREGROUND_SERVICE",
+            "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+            "android.permission.POST_NOTIFICATIONS",
+            "android.permission.SCHEDULE_EXACT_ALARM"
           ];
           for (const p of perms) {
             if (!xml.includes(p)) {
@@ -161,6 +508,12 @@ jobs:
           }
           if (!xml.includes("usesCleartextTraffic")) {
             xml = xml.replace("<application", `<application android:usesCleartextTraffic="true"`);
+          }
+          if (!xml.includes("ApiAiKeepAliveService")) {
+            xml = xml.replace(
+              "</application>",
+              `    <service android:name=".ApiAiKeepAliveService" android:enabled="true" android:exported="false" android:foregroundServiceType="dataSync" />\n        <receiver android:name=".ApiAiTutorAlarmReceiver" android:enabled="true" android:exported="false" />\n    </application>`
+            );
           }
           fs.writeFileSync(mPath, xml);
 
@@ -174,7 +527,6 @@ jobs:
             fs.writeFileSync(sPath, styles);
           }
 
-          // Inject Google's GCS Maven Central Mirror before mavenCentral() to eliminate HTTP 429 rate-limit!
           const rootGradlePath = "android/build.gradle";
           if (fs.existsSync(rootGradlePath)) {
             let rg = fs.readFileSync(rootGradlePath, "utf8");
@@ -183,7 +535,6 @@ jobs:
               'maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }\n        mavenCentral()'
             );
             fs.writeFileSync(rootGradlePath, rg);
-            console.log("Injected Google GCS Maven Central Mirror into android/build.gradle");
           }
 
           const gPath = "android/app/build.gradle";
