@@ -83,6 +83,20 @@
     </div>
 
     <button type="button" class="btn-p tap" style="width:100%;" onclick="submitActivateKey()">Kích hoạt ngay</button>
+
+    <div style="font-size:12px;color:var(--ink-3);text-align:center;margin-top:2px;">Chưa có Key? Liên hệ cấp Key nhanh:</div>
+    <div class="contact-grid">
+      <button type="button" class="btn-contact tap" onclick="openSupportContact('telegram')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        <span id="kg-tg-label">@BangTechnology</span>
+      </button>
+      <button type="button" class="btn-contact tap" onclick="openSupportContact('zalo')">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/></svg>
+        <span>Nhắn Zalo lấy Key</span>
+      </button>
+    </div>
+    <button type="button" class="btn-s tap" style="width:100%;font-size:13px;" onclick="openPlanComparisonModal()">Xem bảng giá & quyền lợi 4 gói Key</button>
+
     <div style="display:flex;gap:8px;">
       <button type="button" class="btn-s tap" style="flex:1;" onclick="refreshSession()">Kiểm tra lại</button>
       <button type="button" class="btn-danger tap" style="flex:1;" onclick="logoutUser()">Đăng xuất</button>
@@ -165,6 +179,21 @@
       <button type="button" class="nav-row tap-soft" onclick="startNewChat()">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         <span>Cuộc trò chuyện mới</span>
+      </button>
+      <button type="button" class="nav-row tap-soft" onclick="switchView('teams')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="flex:1;">Đội ngũ AI (Teams)</span>
+        <span class="tag-st tier-pro_max">Pro Max+</span>
+      </button>
+      <button type="button" class="nav-row tap-soft" onclick="switchView('tutors')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        <span style="flex:1;">Gia sư AI</span>
+        <span class="tag-st tier-pro_max">Pro Max+</span>
+      </button>
+      <button type="button" class="nav-row tap-soft" onclick="openSharedContextManager()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        <span style="flex:1;">Hồ sơ boi-canh.md</span>
+        <span class="tag-st st-active">Sync AI</span>
       </button>
       <button type="button" class="nav-row tap-soft" onclick="switchView('customize')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -281,6 +310,7 @@
               <span id="mem-bar-label" class="num">Trí nhớ đang dùng (0 mục)</span>
             </span>
             <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span id="top-ctx-pill" class="ctx-pill-btn tap" onclick="event.stopPropagation();openSharedContextManager()">boi-canh.md</span>
               <span id="chat-pin-badge" class="tag-quiet nowrap-pill" style="display:none;font-family:var(--font-mono);font-size:10.5px;"></span>
               <span id="chev-mem-bar" class="chev"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
             </span>
@@ -314,28 +344,20 @@
         <div class="composer-inner">
           <div id="at-popup" class="lg-float"></div>
 
+          <div id="active-context-banner" style="display:none;flex-direction:column;gap:6px;"></div>
+          <div id="repo-cost-strip" style="display:none;justify-content:center;"></div>
+
           <div class="composer-top-controls">
             <div class="seg-track mode-seg lg-float" id="mode-seg">
               <div class="seg-thumb" id="mode-thumb"></div>
               <button type="button" class="seg-btn active" data-mode="chat" onclick="setWorkMode('chat')">Trò chuyện</button>
               <button type="button" class="seg-btn" data-mode="task" onclick="setWorkMode('task')">Nhiệm vụ</button>
-              <button type="button" class="seg-btn" data-mode="four_agent" onclick="setWorkMode('four_agent')">4-Agent</button>
             </div>
-            <button type="button" id="btn-agent-cfg" class="mini-toggle-pill lg-float tap" style="display:none;" onclick="toggleAcc('agent-cfg-acc','chev-ag')">
-              <span>Cấu hình</span>
-              <span id="chev-ag" class="chev"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-            </button>
             <button type="button" id="btn-skill-stack" class="mini-toggle-pill lg-float tap" onclick="toggleAcc('skill-stack-acc','chev-sk')">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               <span id="sk-stack-lbl" class="num">Skills</span>
               <span id="chev-sk" class="chev"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
             </button>
-          </div>
-
-          <div id="agent-cfg-acc" class="acc-wrap">
-            <div class="acc-inner">
-              <div id="agent-cfg-box" class="agent-cfg-panel lg-float"></div>
-            </div>
           </div>
 
           <div id="skill-stack-acc" class="acc-wrap">
@@ -454,6 +476,63 @@
         </div>
       </div>
     </section>
+
+    <!-- VIEW 7: ĐỘI NGŨ AI (TEAMS) -->
+    <section id="view-teams" class="view">
+      <div class="page-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+          <div>
+            <h2 class="p-title" style="margin:0;">Đội ngũ AI (Teams)</h2>
+            <div style="font-size:12.5px;color:var(--ink-3);">Team Lập trình 4-Agent & Tự lập đội ngũ 2–6 thành viên dùng chung boi-canh.md</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn-blue tap" onclick="openTeamEditor()">+ Tạo Team mới</button>
+            <button type="button" class="btn-s tap" onclick="switchView('chat')">Đóng</button>
+          </div>
+        </div>
+        <div id="teams-body"></div>
+      </div>
+    </section>
+
+    <!-- VIEW 8: TẠO / SỬA TEAM AI -->
+    <section id="view-team-editor" class="view">
+      <div class="page-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <button type="button" class="btn-s tap" onclick="switchView('teams')">Quay lại</button>
+          <button type="button" class="btn-p tap" onclick="saveCustomTeam()">Lưu Team</button>
+        </div>
+        <div id="team-editor-body"></div>
+      </div>
+    </section>
+
+    <!-- VIEW 9: GIA SƯ AI (AI TUTORS) -->
+    <section id="view-tutors" class="view">
+      <div class="page-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+          <div>
+            <h2 class="p-title" style="margin:0;">Gia sư AI</h2>
+            <div style="font-size:12.5px;color:var(--ink-3);">Lịch học liên kết · Nhắc học tự động · Kho kiến thức thực tế & Sổ lỗi sai</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn-blue tap" onclick="openTutorEditor()">+ Tạo Gia sư</button>
+            <button type="button" class="btn-s tap" onclick="switchView('chat')">Đóng</button>
+          </div>
+        </div>
+        <div id="tutors-body"></div>
+      </div>
+    </section>
+
+    <!-- VIEW 10: TẠO / SỬA GIA SƯ AI -->
+    <section id="view-tutor-editor" class="view">
+      <div class="page-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <button type="button" class="btn-s tap" onclick="switchView('tutors')">Quay lại</button>
+          <button type="button" class="btn-p tap" onclick="saveTutorProfile()">Lưu Gia sư</button>
+        </div>
+        <div id="tutor-editor-body"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -579,6 +658,8 @@
 <input id="in-doc" type="file" accept=".txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.sql,.pine,.mq5,.pdf" multiple hidden onchange="handleDocs(this.files)" />
 <input id="in-skill-file" type="file" accept=".json,.md,.txt" hidden onchange="importSkillFile(this.files)" />
 <input id="in-wall" type="file" accept="image/*" hidden onchange="handleWallUpload(this.files)" />
+<input id="in-member-file" type="file" accept=".txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.sql,.pine,.mq5,.pdf" multiple hidden onchange="handleMemberFilePick(this.files)" />
+<input id="in-tutor-file" type="file" accept=".txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.sql,.pdf" multiple hidden onchange="handleTutorFilePick(this.files)" />
 
 <script>
 window.__APP_META__ = {
