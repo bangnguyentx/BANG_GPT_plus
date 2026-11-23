@@ -1,4 +1,4 @@
-/* hallmark: v2.0.0 | scope: app | genre: modern-minimal | theme: custom-obsidian-ink | posture: restrained | motion: apple-spring | accent: cobalt */
+/* hallmark: v2.0.0 | scope: app | genre: modern-minimal | theme: custom-obsidian-ink | posture: restrained | motion: animate-ui-apple-spring | accent: cobalt */
 /* critique: Neutral ink-tinted obsidian ramp, single cobalt accent (<5%), 4px grid, concentric radii, zero literal colors past :root, transform/opacity motion only, full reduced-motion/transparency/contrast parity */
 /* waive: none */
 
@@ -94,9 +94,17 @@
   --r-xl: 24px;
   --r-pill: 999px;
 
-  /* Motion tokens (Apple critically-damped fluid + Tasteskill ease-out) */
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Motion tokens (Animate UI + Apple Fluid Interfaces) */
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-soft: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-drawer: cubic-bezier(0.34, 1.2, 0.64, 1);
+  --ease-draw: cubic-bezier(0, 0, 0.58, 1);
+  --ease-away: cubic-bezier(0.33, 0.17, 0.67, 0.5);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --scale-press: 0.97;
+  --scale-choice: 0.985;
+  --blur-icon: 2px;
+  --blur-surface: 4px;
   --dur-micro: 120ms;
   --dur-short: 200ms;
   --dur-long: 340ms;
@@ -203,12 +211,12 @@ button {
 .tap {
   transition: transform var(--dur-micro) var(--ease), background-color var(--dur-short) var(--ease), color var(--dur-short) var(--ease), border-color var(--dur-short) var(--ease), opacity var(--dur-short) var(--ease);
 }
-.tap:active { transform: scale(0.965); }
+.tap:active { transform: scale(var(--scale-press)); }
 
 .tap-soft {
   transition: transform var(--dur-micro) var(--ease), background-color var(--dur-short) var(--ease);
 }
-.tap-soft:active { transform: scale(0.985); }
+.tap-soft:active { transform: scale(var(--scale-choice)); }
 
 /* Grid Accordion (Zero height/max-height jank) */
 .acc-wrap {
@@ -1454,6 +1462,237 @@ button {
 }
 .tok-stat-lbl { font-size: 11.5px; color: var(--ink-3); }
 .tok-stat-val { font-size: 14px; font-weight: 500; color: var(--ink); margin-top: 2px; }
+
+
+/* ===== v3.3 ANIMATE-UI MICRO-INTERACTIONS, BOI-CANH.MD, TEAMS & AI TUTORS ===== */
+.check-draw path {
+  stroke-dasharray: 28;
+  stroke-dashoffset: 28;
+  animation: checkStrokeDraw 280ms var(--ease-draw) forwards;
+}
+@keyframes checkStrokeDraw { to { stroke-dashoffset: 0; } }
+
+/* Orb icon blur-scale swap (Animate UI swap recipe) */
+.orb-action-btn svg {
+  animation: orbIconSwap 180ms var(--ease);
+}
+@keyframes orbIconSwap {
+  from { opacity: 0; transform: scale(0.75); filter: blur(var(--blur-icon)); }
+  to { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+/* Smooth Streaming Reveal & Gentle Thinking Indicator (2B) */
+.md.streaming-live > p:last-child,
+.md.streaming-live > ul:last-child,
+.md.streaming-live > ol:last-child,
+.md.streaming-live > pre:last-child {
+  animation: streamChunkFade 180ms var(--ease) backwards;
+}
+@keyframes streamChunkFade {
+  from { opacity: 0.52; transform: translate3d(0, 3px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.think-box.thinking-active .think-head-l svg {
+  animation: thinkSpin 2.4s linear infinite;
+  color: var(--accent-ink);
+}
+@keyframes thinkSpin { to { transform: rotate(360deg); } }
+
+/* Staggered list micro-entrance */
+.stagger-item {
+  animation: itemSlideIn 220ms var(--ease) backwards;
+  animation-delay: calc(min(var(--stagger-i, 0), 8) * 24ms);
+}
+@keyframes itemSlideIn {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Skeleton Loader Shimmer */
+.skel-line {
+  height: 14px;
+  border-radius: var(--r-xs);
+  background: linear-gradient(90deg, var(--row-hover) 25%, var(--row-active) 50%, var(--row-hover) 75%);
+  background-size: 200% 100%;
+  animation: skelSweep 1.3s linear infinite;
+}
+@keyframes skelSweep {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* Single Source of Truth boi-canh.md pill (video_1.mp4) */
+.ctx-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  background: var(--row-hover);
+  border: 1px solid var(--rim-hi);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.ctx-pill-btn.attached {
+  background: var(--ok-soft);
+  border-color: var(--ok-rim);
+  color: var(--ok-ink);
+}
+
+/* Repo Token Estimator Bar (4A) */
+.repo-budget-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-rim);
+  color: var(--info-ink);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.repo-budget-sel {
+  background: var(--surface-0);
+  border: 1px solid var(--rim-hi);
+  border-radius: var(--r-xs);
+  color: var(--ink);
+  font-size: 11.5px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+/* Active Team / Tutor / Context Banner above Composer */
+.ctx-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-rim);
+  font-size: 12.5px;
+  color: var(--info-ink);
+}
+.tutor-proactive-card {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--accent-rim);
+  margin-bottom: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.tutor-auto-save-bar {
+  margin-top: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--ok-soft);
+  border: 1px solid var(--ok-rim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-size: 12.5px;
+  color: var(--ok-ink);
+}
+
+/* Key Gate Contact Grid (5BC) */
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+.btn-contact {
+  height: 40px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--rim-hi);
+  background: var(--row-hover);
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  color: var(--ink);
+  text-decoration: none;
+}
+@media (hover: hover) { .btn-contact:hover { background: var(--row-active); } }
+
+/* Teams & Tutors Builder Components */
+.member-editor-card {
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+  background: var(--row-hover);
+  border: 1px solid var(--rim-hi);
+  margin-bottom: var(--s-3);
+}
+.day-pill-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s-1); }
+.day-pill {
+  height: 32px;
+  min-width: 38px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-xs);
+  border: 1px solid var(--rim-hi);
+  background: var(--row-hover);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.day-pill.on { background: var(--g-active); color: var(--g-active-ink); border-color: var(--g-active); }
+.conflict-banner {
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-rim);
+  color: var(--warn-ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin-top: var(--s-2);
+}
+.file-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s-2); }
+.file-mini-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px var(--s-2);
+  border-radius: var(--r-xs);
+  background: var(--surface-0);
+  border: 1px solid var(--rim);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.streak-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-xs);
+  background: var(--ok-soft);
+  color: var(--ok-ink);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Low-Power / Weak-Device Motion Mode (2B Đột phá) */
+body.low-power-motion *,
+body.low-power-motion *::before,
+body.low-power-motion *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 90ms !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
 /* Accessibility Parity (Apple Design §14 + Hallmark Floor 7) */
 @media (prefers-reduced-motion: reduce) {
