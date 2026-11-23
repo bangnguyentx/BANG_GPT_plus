@@ -1,4 +1,4 @@
-name: Build & Release Android APK (API AI v3.3)
+name: Build & Release Android APK (API AI v3.4)
 
 on:
   push:
