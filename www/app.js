@@ -1,4 +1,4 @@
-/* API AI v3.3 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
+/* AI AI v3.3 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
