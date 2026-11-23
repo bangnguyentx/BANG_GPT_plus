@@ -1,4 +1,4 @@
-/* AI AI v3.3 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
+/* API AI v3.4 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
@@ -27,6 +27,7 @@ const DEFAULT_CFG = {
   blurPx: 18, glassAlpha: 0.78, wallpaper: "",
   lowPowerMotion: false,
   repoReaderModel: "gpt-6.2-sol",
+  mcpBuiltin: { linkReader: true, webSearch: true, contextSync: true, builderAssist: true, utilities: true },
   agentCfg: {
     enabledRoles: { architect: true, coder: true, reviewer: true, tester: true },
     models: { architect: "gpt-6.2-astra", coder: "gpt-6.2-sol", reviewer: "gpt-6.2-astra", tester: "gpt-6-luna" },
@@ -44,10 +45,10 @@ const ICON_LOCK = `<svg width="14" height="14" fill="none" stroke="currentColor"
 let db = null;
 function openDB() {
   return new Promise((res, rej) => {
-    const req = indexedDB.open("ChatGPTProAppDB_v3", 2);
+    const req = indexedDB.open("ChatGPTProAppDB_v3", 3);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ["chats", "skills", "notebooks", "memories", "library", "kv", "teams", "tutors", "contexts"].forEach(s => {
+      ["chats", "skills", "notebooks", "memories", "library", "kv", "teams", "tutors", "contexts", "mcp"].forEach(s => {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: "id" });
       });
     };
@@ -75,6 +76,7 @@ let S = {
   teams: [], activeTeamId: null,
   tutors: [], activeTutorId: null,
   contexts: [], activeContextId: null,
+  mcpServers: [],
   pendingTask: null,
   adminData: null, adminTab: "keys", selectedTierTab: "classic", canvasPreviewOnly: false
 };
@@ -165,6 +167,7 @@ async function boot() {
     S.cfg = {
       ...DEFAULT_CFG,
       ...saved,
+      mcpBuiltin: { ...DEFAULT_CFG.mcpBuiltin, ...(saved.mcpBuiltin || {}) },
       agentCfg: {
         ...DEFAULT_CFG.agentCfg,
         ...(saved.agentCfg || {}),
@@ -194,7 +197,9 @@ async function boot() {
   // Load Tutors & Shared Contexts (boi-canh.md)
   S.tutors = await dbAll("tutors");
   S.contexts = await dbAll("contexts");
+  S.mcpServers = await dbAll("mcp");
   S.pendingTask = await dbGet("kv", "pendingTask");
+  renderMcpQuickBadge();
 
   applyTheme();
   renderSkillStack();
@@ -466,15 +471,42 @@ async function submitSelfPasswordChange() {
 /* ===== CLOUD SYNC & ACCOUNT UI (HIDES SERVER URL FROM REGULAR USERS!) ===== */
 async function pullCloudData() {
   try {
-    const [rc, rm, rx] = await Promise.all([apiFetch("/sync/chats"), apiFetch("/sync/memories"), apiFetch("/sync/contexts")]);
+    const [rc, rm, rx, rtm, rtu, rsk, rmcp] = await Promise.all([
+      apiFetch("/sync/chats"),
+      apiFetch("/sync/memories"),
+      apiFetch("/sync/contexts"),
+      apiFetch("/sync/teams"),
+      apiFetch("/sync/tutors"),
+      apiFetch("/sync/skills"),
+      apiFetch("/sync/mcp")
+    ]);
     if (rc.ok) S.chats = ((await rc.json()).chats || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     if (rm.ok) S.memories = (await rm.json()).memories || [];
     if (rx.ok) {
-      const cloudCtx = (await rx.json()).contexts || [];
-      for (const c of cloudCtx) await dbPut("contexts", c);
+      for (const c of ((await rx.json()).contexts || [])) await dbPut("contexts", c);
       S.contexts = (await dbAll("contexts")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-      renderTopContextPill();
     }
+    if (rtm.ok) {
+      for (const tm of ((await rtm.json()).items || [])) await dbPut("teams", tm);
+      S.teams = await dbAll("teams");
+      await ensureBuiltinCodingTeam();
+    }
+    if (rtu.ok) {
+      for (const tu of ((await rtu.json()).items || [])) await dbPut("tutors", tu);
+      S.tutors = await dbAll("tutors");
+      syncAllTutorAlarms();
+    }
+    if (rsk.ok) {
+      for (const sk of ((await rsk.json()).items || [])) await dbPut("skills", sk);
+      S.skills = await dbAll("skills");
+      renderSkillStack(); renderRepoCostStrip();
+    }
+    if (rmcp.ok) {
+      for (const sv of ((await rmcp.json()).items || [])) await dbPut("mcp", sv);
+      S.mcpServers = await dbAll("mcp");
+      renderMcpQuickBadge();
+    }
+    renderTopContextPill();
   } catch {}
 }
 function syncAccountUI() {
@@ -842,7 +874,85 @@ async function handleVideo(files) {
   };
   document.getElementById("in-vid").value = "";
 }
-async function handleDocs(files) { for (const f of files || []) S.atts.push({ id: "d-" + Date.now() + Math.random(), type: "file", name: f.name, text: (await f.text()).slice(0, 50000) }); renderChips(); updateOrbButton(); haptic("ok"); showToast(`Đã đính kèm ${files.length} tệp`); document.getElementById("in-doc").value = ""; }
+async function ensurePdfJsLoaded() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  return new Promise((res, rej) => {
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+    sc.onload = () => {
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+        res(window.pdfjsLib);
+      } else rej(new Error("Không tải được bộ đọc PDF."));
+    };
+    sc.onerror = () => rej(new Error("Không thể tải thư viện đọc PDF (cần có mạng)."));
+    document.head.appendChild(sc);
+  });
+}
+
+async function extractRealFileText(file) {
+  const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+  if (!isPdf) {
+    const raw = (await file.text()).slice(0, 50000);
+    return { text: raw, pages: 0 };
+  }
+  try {
+    showToast(`Đang trích xuất văn bản PDF: ${file.name}...`);
+    const pdfjs = await ensurePdfJsLoaded();
+    const buf = await file.arrayBuffer();
+    const doc = await pdfjs.getDocument({ data: buf }).promise;
+    const maxPages = Math.min(doc.numPages, 35);
+    const out = [];
+    for (let p = 1; p <= maxPages; p++) {
+      const page = await doc.getPage(p);
+      const tc = await page.getTextContent();
+      const line = tc.items.map(it => it.str || "").join(" ").replace(/\s+/g, " ").trim();
+      if (line) out.push(`[Trang ${p}/${doc.numPages}] ${line}`);
+    }
+    const text = out.join("\n\n").slice(0, 48000);
+    if (!text) return { text: `(File PDF ${doc.numPages} trang dạng ảnh scan — hãy chụp ảnh trang đề để dùng HD Vision đọc nét hơn.)`, pages: doc.numPages };
+    return { text, pages: doc.numPages };
+  } catch (e) {
+    return { text: `(Không đọc được chữ từ PDF "${file.name}": ${e.message})`, pages: 0 };
+  }
+}
+
+async function handleDocs(files) {
+  for (const f of files || []) {
+    const { text, pages } = await extractRealFileText(f);
+    let finalTxt = text;
+    let digested = false;
+    // If PDF/Doc is very long (> 6000 chars), auto-digest via GPT 6.2 Sol to save ~80% tokens!
+    if (text.length > 6000 && S.user?.licenseActive) {
+      showToast(`Đang lọc gọn ${f.name}${pages ? ` (${pages} trang)` : ""} bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"}...`);
+      try {
+        const r = await apiFetch("/ai/digest", {
+          method: "POST",
+          body: {
+            readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol",
+            instruction: `Trích xuất đầy đủ ý chính, số liệu, câu hỏi/đề bài và cấu trúc từ tài liệu "${f.name}" để mô hình chính xử lý chính xác mà tiết kiệm token.`,
+            content: text
+          }
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.digest) {
+            finalTxt = `[BẢN TÓM LƯỢC TỐI ƯU TỪ ${f.name}${pages ? ` (${pages} trang)` : ""}]
+${d.digest}
+
+[TRÍCH ĐOẠN GỐC ĐẦU TÀI LIỆU]
+${text.slice(0, 2200)}`;
+            digested = true;
+          }
+        }
+      } catch {}
+    }
+    S.atts.push({ id: "d-" + Date.now() + Math.random(), type: "file", name: pages ? `${f.name} (${pages}tr)` : f.name, text: finalTxt, digested });
+  }
+  renderChips(); updateOrbButton(); haptic("ok");
+  showToast(`Đã đính kèm ${files.length} tệp`);
+  document.getElementById("in-doc").value = "";
+}
 
 /* ===== MODEL DROPDOWN & CHAT ENGINE (STICKY API + CONTROLLED SWITCH) ===== */
 function renderModelDropdown() {
@@ -908,7 +1018,15 @@ function buildSystemPrompt(chat, query, hasImgs, handoffSummary = "", digestedRe
   });
   if (S.activeTool === "canvas") arr.push("CANVAS: Xuất toàn bộ mã trong 1 khối ```html ... ```.");
   if (S.activeTool === "deep_research") arr.push("DEEP RESEARCH: Phân tích đa chiều có bảng so sánh và kết luận thực tế.");
+  if (S.activeTool === "web_search") arr.push("TÌM KIẾM WEB TRỰC TIẾP: Ưu tiên tổng hợp từ các nguồn web thực tế được cung cấp ở trên và dẫn rõ nguồn.");
   if (S.activeTool === "guided") arr.push("HỌC CÓ HƯỚNG DẪN: Giải thích bản chất kèm câu hỏi kiểm tra tư duy.");
+  if (S.cfg.mcpBuiltin?.builderAssist !== false && !tutorExtraSys) {
+    const busySched = (S.tutors || []).map(t => `- ${t.name} (${t.subject}): thứ ${(t.scheduleDays||[]).join(",")} lúc ${t.scheduleTime}`).join("\n") || "(Chưa có lịch nào)";
+    const okMods = getAllowedRealModels().map(m => m.id).join(", ");
+    arr.push(`TRỢ LÝ THIẾT LẬP ĐỘI NGŨ AI & GIA SƯ AI (4AB): Nếu người dùng yêu cầu tạo hộ/thiết kế một "Đội ngũ AI (Team)" hoặc "Gia sư AI" (hoặc hỏi không biết bắt đầu lập Team/Gia sư từ đâu), hãy trả lời ngắn gọn kèm ĐÚNG 1 khối JSON chuẩn đặt trong ${"`".repeat(3)}apiai-builder ... ${"`".repeat(3)} để hệ thống hiện nút [Lưu & Dùng ngay]:
+- Nếu tạo Team: {"kind":"team","name":"Tên Team","desc":"Mô tả ngắn","coordMode":"sequential hoặc council","pauseAfterFirst":false,"maxFixLoops":1,"members":[{"role":"Vai trò 1","prompt":"Chỉ dẫn chi tiết","modelId":"1 trong các model: ${okMods}"}]} (2 đến 6 thành viên).
+- Nếu tạo Gia sư: {"kind":"tutor","name":"Tên Gia sư","subject":"Môn học","prompt":"Phong cách & chỉ dẫn chi tiết","modelId":"auto_tutor","scheduleDays":[1,3,5],"scheduleTime":"20:00","reminderText":"Câu nhắc tự nhiên"} (lưu ý: chọn ngày/giờ TRÁNH TRÙNG với lịch hiện tại của học viên:\n${busySched}).`);
+  }
   return arr.join("\n\n");
 }
 
@@ -1243,9 +1361,6 @@ async function runFourAgentPipeline(chat, userPrompt, resumeMsg = null) {
   } finally {
     aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
     bgStopTask();
-    if (document.hidden && aiMsg.text) {
-      bgNotifyDone(activeTutor ? `Gia sư ${activeTutor.name} đã trả lời` : "API AI đã trả lời xong", aiMsg.text.replace(/[#*`]/g, "").slice(0, 120));
-    }
     apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
     syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
   }
@@ -1370,13 +1485,17 @@ async function sendPrompt(overrideText = null, opts = {}) {
   const aiMsg = {
     id: "m-" + (Date.now() + 1), role: "assistant", text: "", thinking: "", thinkingLevel: S.cfg.thinkingLevel || "high", thinkMs: 0,
     modelLabel: `${chosenUi.short || chosenUi.title} · ${THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel)?.title || "Cao"}`,
-    slot: "", citedFile: sentAtts[0]?.name || "", feedback: null, streaming: true, failedSwitch: false, canSwitch: false, ts: Date.now()
+    slot: "", citedFile: sentAtts[0]?.name || "", toolSteps: [], sources: [], fetchedRepoUrl: "",
+    feedback: null, streaming: true, failedSwitch: false, canSwitch: false, ts: Date.now()
   };
   chat.messages.push(aiMsg); renderMessages(); scrollToBottom(true);
 
   S.streaming = true; S.abort = new AbortController(); updateOrbButton();
   try {
-    const msgs = [{ role: "system", content: sysPrompt }];
+    // v3.4 Pre-Flight MCP & Smart Link / Web Search Orchestrator (video_1.mp4 live step cards!)
+    const preFlightContext = await runPreFlightToolsAndMcp(aiMsg, text, chosenUi);
+    const fullSysPrompt = preFlightContext ? `${sysPrompt}\n\n${preFlightContext}` : sysPrompt;
+    const msgs = [{ role: "system", content: fullSysPrompt }];
     for (const m of chat.messages.slice(0, -1).filter(x => !x.failedSwitch).slice(-20)) {
       if (m.role === "assistant") { msgs.push({ role: "assistant", content: m.text || "" }); continue; }
       const imgs = (m.atts || []).filter(a => a.dataUrl), docs = (m.atts || []).filter(a => a.type === "file");
@@ -1435,12 +1554,13 @@ async function sendPrompt(overrideText = null, opts = {}) {
       chat.pinnedSlotLabel = slotLbl || `${pId} #${Number(kIdx) + 1}`;
     }
 
-    const hm = res.headers.get("X-Daily-Msgs"), hl = res.headers.get("X-Daily-Limit"), ht = res.headers.get("X-Daily-Tokens"), htl = res.headers.get("X-Daily-Token-Limit");
+    const hm = res.headers.get("X-Daily-Msgs"), hl = res.headers.get("X-Daily-Limit"), ht = res.headers.get("X-Daily-Tokens"), htl = res.headers.get("X-Daily-Token-Limit"), hbt = res.headers.get("X-Bonus-Tokens");
     if (S.user) {
       if (hm !== null) S.user.dailyMsgs = Number(hm);
       if (hl !== null && S.user.limits) S.user.limits.daily_msgs = Number(hl);
       if (ht !== null) S.user.dailyTokens = Number(ht);
       if (htl !== null && S.user.limits) S.user.limits.daily_tokens = Number(htl);
+      if (hbt !== null) S.user.bonusTokens = Number(hbt);
       syncAccountUI();
     }
     aiMsg.slot = slotLbl || "";
@@ -1542,6 +1662,10 @@ async function sendPrompt(overrideText = null, opts = {}) {
     aiMsg.text = e.name === "AbortError" ? (aiMsg.text + "\n\n*(Đã dừng)*") : `**Thông báo:** ${e.message}`;
   } finally {
     aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
+    bgStopTask();
+    if (document.hidden && aiMsg.text) {
+      bgNotifyDone(activeTutor ? `Gia sư ${activeTutor.name} đã trả lời` : "API AI đã trả lời xong", aiMsg.text.replace(/[#*`]/g, "").slice(0, 120));
+    }
     apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
     syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
   }
@@ -1572,24 +1696,95 @@ async function runGenImage(chat, prompt) {
 
 /* ===== MARKDOWN & MESSAGE RENDERING ===== */
 let cbSeq = 0;
+const builderPayloadMap = new Map();
+
+function renderBuilderPreviewCard(rawJson) {
+  let obj = null;
+  try { obj = JSON.parse(rawJson.trim()); } catch { return ""; }
+  if (!obj || !["team", "tutor"].includes(obj.kind)) return "";
+  const bid = "bld-" + (++cbSeq);
+  builderPayloadMap.set(bid, obj);
+
+  if (obj.kind === "team") {
+    const mems = Array.isArray(obj.members) ? obj.members : [];
+    return `<div class="builder-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <strong style="font-size:14.5px;">Đề xuất Đội ngũ AI: ${esc(obj.name || "Team mới")}</strong>
+        <span class="tag-st tier-pro_max">${mems.length} thành viên · ${obj.coordMode==="council"?"Hội đồng":"Dây chuyền"}</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-2);">${esc(obj.desc || "")}</div>
+      <div class="file-tag-list">${mems.map(m => `<span class="file-mini-tag">${esc(m.role)} (${esc(m.modelId || "gpt-6.2-sol")})</span>`).join("")}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <button type="button" class="btn-p tap" style="height:36px;font-size:13px;flex:1;" onclick="applyAiBuilderCard('${bid}', true)">Lưu & Dùng ngay</button>
+        <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="applyAiBuilderCard('${bid}', false)">Chỉnh sửa trước</button>
+      </div></div>`;
+  }
+  const daysLbl = (obj.scheduleDays || [1, 3, 5]).map(x => WEEK_DAYS.find(w => w[0] === x)?.[1] || x).join(", ");
+  return `<div class="builder-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <strong style="font-size:14.5px;">Đề xuất Gia sư AI: ${esc(obj.name || "Gia sư")}</strong>
+      <span class="tag-st tier-pro">${esc(obj.subject || "Môn học")}</span>
+    </div>
+    <div style="font-size:12.5px;color:var(--ink-2);line-height:1.5;">
+      Lịch học đề xuất (không trùng): <b>${esc(daysLbl)}</b> lúc <b class="num">${esc(obj.scheduleTime || "20:00")}</b><br/>
+      Nhắc học: <i>"${esc(obj.reminderText || "Nay chưa vào học à?")}"</i>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+      <button type="button" class="btn-p tap" style="height:36px;font-size:13px;flex:1;" onclick="applyAiBuilderCard('${bid}', true)">Lưu & Vào học ngay</button>
+      <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="applyAiBuilderCard('${bid}', false)">Chỉnh sửa trước</button>
+    </div></div>`;
+}
+
+function parseMarkdownTables(escapedText, tablesOut) {
+  const lines = escapedText.split("\n");
+  const res = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].includes("|") && i + 1 < lines.length && /^\s*\|?[\s:-]+\|[\s|:-]+\s*$/.test(lines[i + 1])) {
+      const splitRow = ln => ln.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      const headers = splitRow(lines[i]);
+      const rows = [];
+      i += 2;
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim() !== "") {
+        rows.push(splitRow(lines[i]));
+        i++;
+      }
+      const tidx = tablesOut.length;
+      tablesOut.push(`<div class="md-table-wrap"><table><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${headers.map((_, ci) => `<td>${r[ci] || ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      res.push(`@@TBL_${tidx}@@`);
+    } else {
+      res.push(lines[i]);
+      i++;
+    }
+  }
+  return res.join("\n");
+}
+
 function renderMd(md) {
-  const blocks = [];
+  const blocks = [], tables = [];
   let s = String(md || "").replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, code) => { const i = blocks.length; blocks.push({ lang: lang || "text", code }); return `@@CB_${i}@@`; });
-  s = esc(s)
+  s = esc(s);
+  s = parseMarkdownTables(s, tables);
+  s = s
     .replace(/^### (.*)$/gm, "<h3>$1</h3>").replace(/^## (.*)$/gm, "<h2>$1</h2>").replace(/^# (.*)$/gm, "<h1>$1</h1>")
     .replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, '<code class="ic">$1</code>')
     .replace(/^\s*[-*] (.*)$/gm, "<li>$1</li>").replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>").replace(/<\/ul>\s*<ul>/g, "")
     .replace(/\n{2,}/g, "</p><p>");
   s = `<p>${s.replace(/\n/g, "<br>")}</p>`;
+  tables.forEach((tHtml, i) => { s = s.replace(`@@TBL_${i}@@`, tHtml); });
   blocks.forEach((b, i) => {
+    if (b.lang.toLowerCase() === "apiai-builder") {
+      const card = renderBuilderPreviewCard(b.code);
+      if (card) { s = s.replace(`@@CB_${i}@@`, card); return; }
+    }
     const enc = encodeURIComponent(b.code), cid = "cb-" + (++cbSeq), canPrev = ["html", "svg"].includes(b.lang.toLowerCase());
     s = s.replace(`@@CB_${i}@@`, `<div class="code-box"><div class="code-top">
-      <button class="tap" style="display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12.5px;" onclick="toggleAcc('${cid}','ch-${cid}')">
+      <button type="button" class="tap" style="display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12.5px;" onclick="toggleAcc('${cid}','ch-${cid}')">
         <span id="ch-${cid}" class="chev rot"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span><span>${esc(b.lang)}</span></button>
       <div class="code-btns">
-        ${canPrev ? `<button class="code-icon-btn tap" onclick="openCanvasCode(decodeURIComponent('${enc}'),'Canvas')" aria-label="Xem trước"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : ""}
-        <button class="code-icon-btn tap" onclick="copyCodeBtn(this,decodeURIComponent('${enc}'))" aria-label="Sao chép"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        ${canPrev ? `<button type="button" class="code-icon-btn tap" onclick="openCanvasCode(decodeURIComponent('${enc}'),'Canvas')" aria-label="Xem trước"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : ""}
+        <button type="button" class="code-icon-btn tap" onclick="copyCodeBtn(this,decodeURIComponent('${enc}'))" aria-label="Sao chép"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
       </div></div><div id="${cid}" class="acc-wrap open"><div class="acc-inner"><pre><code>${esc(b.code)}</code></pre></div></div></div>`);
   });
   return s;
@@ -1618,7 +1813,7 @@ function renderMessages() {
           <button type="button" class="btn-p tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="saveMessageToTutorNotes('${m.suggestSaveTutorId}','${m.id}')">Lưu ngay</button>
           <button type="button" class="mini-act tap" onclick="dismissTutorSuggest('${m.id}')">${ICON_X}</button>
         </div></div>` : "";
-      return `<div class="msg-row user">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}${saveBar}</div>`;
+      return `<div class="msg-row user">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}${!S.streaming && m.text ? `<div class="user-msg-acts"><button type="button" class="mini-act tap" onclick="editUserMessage('${m.id}')" aria-label="Sửa tin nhắn">${ICON_EDIT}</button></div>` : ""}${saveBar}</div>`;
     }
     if (m.pipeline) {
       const p = m.pipeline;
@@ -1663,7 +1858,7 @@ function renderMessages() {
       return `<div class="msg-row assistant"><div class="pipeline-wrap">
         <div class="ai-meta-line">
           <span class="ai-logo-badge"><img class="brand-mark" src="logo-mark.png" alt="" width="15" height="15" /></span>
-          <span class="meta-pill">4-Agent Dev Pipeline</span>
+          <span class="meta-pill">${esc(m.modelLabel || "Đội ngũ AI")}</span>
           ${(S.user?.role === "admin" && m.slot) ? `<span class="meta-pill nowrap-pill">${esc(m.slot)}</span>` : ""}
         </div>
         ${stepsHtml}${gateHtml}${doneActs}
@@ -1700,7 +1895,13 @@ function renderMessages() {
         <span class="meta-pill">${esc(m.modelLabel || "API AI")}</span>
         ${(S.user?.role === "admin" && m.slot) ? `<span class="meta-pill nowrap-pill">${esc(m.slot)}</span>` : ""}
       </div>
+      ${renderToolStepsBlock(m)}
       ${thinkBlock}${wavy}<div class="md ${m.streaming ? "streaming-live" : ""}" id="md-${m.id}">${m.text ? renderMd(m.text) : ""}</div>
+      ${renderSourcesStrip(m.sources)}
+      ${(!m.streaming && m.fetchedRepoUrl) ? `<div class="img-act-row">
+        <button type="button" class="btn-blue tap" style="height:32px;font-size:12px;" onclick="quickImportRepoFromLink('${esc(m.fetchedRepoUrl)}')">Lưu Repo vào Skills</button>
+        <button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="sendRepoTaskToTeam('${esc(m.fetchedRepoUrl)}','${m.id}')">Chuyển cho Đội ngũ AI</button>
+      </div>` : ""}
       ${m.citedFile ? `<span class="cite-pill">${esc(m.citedFile)}</span>` : ""}
       ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}')" />
         ${m.imagePrompt ? `<div class="img-act-row">
@@ -1712,10 +1913,12 @@ function renderMessages() {
         <button class="act-icon tap ${m.feedback==="down"?"active-dislike":""}" onclick="rateMsg('${m.id}','down')" aria-label="Không thích"><svg fill="${m.feedback==="down"?"currentColor":"none"}" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button>
         <button class="act-icon tap" onclick="shareMsg('${m.id}')" aria-label="Chia sẻ"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4m0-11-6.8 4"/></svg></button>
         <button class="act-icon tap" onclick="copyCodeBtn(this,getMsgText('${m.id}'))" aria-label="Sao chép"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button type="button" class="act-icon tap" onclick="regenerateReply('${m.id}')" aria-label="Tạo lại"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
         <button class="act-icon tap" onclick="openMsgMore('${m.id}')" aria-label="Thêm"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="19" cy="12" r="1.1"/></svg></button>
       </div><button class="act-icon tap ${S.speakingMsgId===m.id?"speaking":""}" onclick="toggleSpeak('${m.id}')" aria-label="Đọc to"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></button></div>` : ""}
     </div></div>`;
   }).join("");
+  typesetMathInElement(list);
 }
 function getMsgText(id) { return S.chats.find(c => c.id === S.activeChatId)?.messages.find(m => m.id === id)?.text || ""; }
 function rateMsg(id, d) { haptic("tap"); const m = S.chats.find(x => x.id === S.activeChatId)?.messages.find(x => x.id === id); if (!m) return; m.feedback = m.feedback === d ? null : d; renderMessages(); }
@@ -1730,6 +1933,8 @@ function openMsgMore(id) {
     ${tBtn}
     <button type="button" class="s-row tap-soft" onclick="closeModal();openCanvasCode(getMsgText('${id}'),'Canvas')"><span>Mở trong Canvas</span></button>
     <button type="button" class="s-row tap-soft" onclick="closeModal();saveLib('doc','Ghi chú API AI',getMsgText('${id}'));showToast('Đã lưu Thư viện')"><span>Lưu vào Thư viện</span></button>
+    <button type="button" class="s-row tap-soft" onclick="closeModal();exportMsgFile('${id}','md')"><span>Xuất phản hồi ra file .md</span></button>
+    <button type="button" class="s-row tap-soft" onclick="closeModal();exportMsgFile('${id}','html')"><span>Xuất / In PDF (.html)</span></button>
     <button type="button" class="s-row tap-soft" onclick="closeModal();addQuickMemory(getMsgText('${id}').slice(0,220))"><span>Lưu đoạn này vào Trí nhớ</span></button>`);
 }
 function toggleSpeak(id) {
@@ -1755,10 +1960,10 @@ async function loadAdminData(silent = false) {
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
     const wv = document.getElementById("admin-worker-ver");
     if (wv) {
-      if (data.backendVersion === "3.3") {
-        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.3</span>`;
+      if (data.backendVersion === "3.4") {
+        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.4</span>`;
       } else {
-        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.3)</span>`;
+        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.4)</span>`;
       }
     }
     if (!silent) renderAdminBody();
@@ -1769,6 +1974,27 @@ function setAdminTab(t) { haptic("tap"); S.adminTab = t; document.querySelectorA
 function renderAdminBody() {
   const d = S.adminData, box = document.getElementById("admin-body");
   if (!d) { box.innerHTML = `<div class="card-item lg-card" style="display:flex;flex-direction:column;gap:10px;"><div class="skel-line" style="width:45%;"></div><div class="skel-line" style="width:92%;"></div><div class="skel-line" style="width:74%;"></div></div>`; return; }
+
+  // TAB 0: OVERVIEW KPI DASHBOARD (6C)
+  if (S.adminTab === "overview") {
+    const an = d.analytics || {};
+    const topMods = an.topModels || [];
+    box.innerHTML = `
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-lbl">User hoạt động hôm nay</div><div class="kpi-val num">${Number(an.activeUsersToday || 0)}</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Tin nhắn hôm nay</div><div class="kpi-val num">${Number(an.totalMsgsToday || 0).toLocaleString("vi-VN")}</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Token tiêu thụ hôm nay</div><div class="kpi-val num" style="color:var(--accent-ink);">${Math.round(Number(an.totalTokensToday || 0) / 1000).toLocaleString("vi-VN")}K</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Key đang hoạt động</div><div class="kpi-val num" style="color:var(--ok-ink);">${Number(an.activeKeysCount || 0)}</div></div>
+      </div>
+      <div class="card-item lg-card">
+        <strong style="display:block;font-size:14.5px;margin-bottom:8px;">Top Model dùng nhiều nhất hôm nay</strong>
+        ${topMods.length ? topMods.map(tm => `<div class="mem-chip-row" style="margin-bottom:6px;">
+          <span style="font-family:var(--font-mono);font-size:12.5px;">${esc(tm.model_id)}</span>
+          <span class="num" style="color:var(--accent-ink);">${Number(tm.reqs || 0)} lượt · ${Math.round(Number(tm.toks || 0) / 1000).toLocaleString("vi-VN")}K tok</span>
+        </div>`).join("") : `<div style="font-size:12.5px;color:var(--ink-3);">Chưa có dữ liệu sử dụng hôm nay.</div>`}
+      </div>`;
+    return;
+  }
 
   // TAB 1: KEYS (TIER x DURATION)
   if (S.adminTab === "keys") {
@@ -1942,10 +2168,11 @@ function renderAdminBody() {
         <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.55;">
           Key: <code style="font-family:var(--font-mono);color:var(--accent-ink);">${esc(u.active_key || "Không có")}</code><br/>
           Hết hạn: ${u.key_expires_at ? new Date(u.key_expires_at).toLocaleString("vi-VN") : "—"} · Thiết bị: <b class="num">${u.deviceCount}</b><br/>
-          Hôm nay: <b class="num">${u.daily_msg_count}/${(u.role==="admin" || Number(u.daily_msg_limit) < 0) ? "Vô hạn" : (u.daily_msg_limit ?? "?")}</b> tin · <b class="num">${Math.round((u.daily_token_count||0)/1000)}K/${u.role==="admin"?"∞":Math.round((u.daily_token_limit||0)/1000)+"K"}</b> token
+          Hôm nay: <b class="num">${u.daily_msg_count}/${(u.role==="admin" || Number(u.daily_msg_limit) < 0) ? "Vô hạn" : (u.daily_msg_limit ?? "?")}</b> tin · <b class="num">${Math.round((u.daily_token_count||0)/1000)}K/${u.role==="admin"?"∞":Math.round((u.daily_token_limit||0)/1000)+"K"}</b> token${u.bonus_tokens ? ` · Dự phòng: <b class="num" style="color:var(--ok-ink);">+${Math.round(u.bonus_tokens/1000).toLocaleString("vi-VN")}K</b>` : ""}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-          <button class="btn-blue tap" onclick="adminPromptChangePass('${esc(u.email)}')">Đổi mật khẩu</button>
+          <button type="button" class="btn-blue tap" onclick="adminBonusTokensModal('${esc(u.email)}',${Number(u.bonus_tokens||0)})">+ Cộng Token</button>
+          <button type="button" class="btn-s tap" onclick="adminPromptChangePass('${esc(u.email)}')">Đổi mật khẩu</button>
           <button class="btn-s tap" onclick="adminUserAct('${esc(u.email)}','reset_daily_usage')">Reset lượt hôm nay</button>
           <button class="btn-s tap" onclick="adminUserAct('${esc(u.email)}','reset_devices')">Reset thiết bị</button>
           ${u.role !== "admin" ? `<button class="btn-s tap" onclick="adminUserAct('${esc(u.email)}','clear_key')">Gỡ Key</button><button class="btn-danger tap" onclick="adminUserAct('${esc(u.email)}','${u.banned?"unban":"ban"}')">${u.banned?"Mở khóa":"Khóa TK"}</button>` : ""}
@@ -2006,7 +2233,25 @@ function renderAdminBody() {
         </div>
       </div>
 
-      <button class="btn-p tap" style="width:100%;margin-bottom:14px;" onclick="adminSaveSystem()">Lưu cấu hình hệ thống</button>
+      <div class="card-item lg-card">
+        <strong style="display:block;font-size:14.5px;margin-bottom:6px;">Tìm kiếm Web thời gian thực (Live Web Search)</strong>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div>
+            <label class="f-lbl">Bộ máy tìm kiếm</label>
+            <select id="sy-sr-eng" class="field">
+              <option value="duckduckgo" ${(d.config.search_config?.engine||"duckduckgo")==="duckduckgo"?"selected":""}>DuckDuckGo (Miễn phí)</option>
+              <option value="tavily" ${d.config.search_config?.engine==="tavily"?"selected":""}>Tavily API</option>
+              <option value="brave" ${d.config.search_config?.engine==="brave"?"selected":""}>Brave Search API</option>
+            </select>
+          </div>
+          <div>
+            <label class="f-lbl">API Key tìm kiếm (nếu dùng Tavily/Brave)</label>
+            <input id="sy-sr-key" type="password" class="field" value="${esc(d.config.search_config?.api_key || "")}" placeholder="Để trống nếu dùng DuckDuckGo" />
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="btn-p tap" style="width:100%;margin-bottom:14px;" onclick="adminSaveSystem()">Lưu cấu hình hệ thống</button>
 
       <div class="card-item lg-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -2240,6 +2485,7 @@ async function openUserTokenBalanceModal() {
     <div style="margin-top:10px;">
       <div style="font-size:12px;color:var(--ink-2);">Token còn lại hôm nay</div>
       <div class="num" style="font-size:24px;font-weight:500;color:var(--ok-ink);letter-spacing:-0.02em;margin-top:2px;">${remTok.toLocaleString("vi-VN")} <span style="font-size:13px;color:var(--ink-2);font-weight:400;">token</span></div>
+      ${Number(u.bonusTokens || 0) > 0 ? `<div class="num" style="font-size:12.5px;color:var(--accent-ink);margin-top:3px;">+ Token dự phòng (Add-on): <b>${Number(u.bonusTokens).toLocaleString("vi-VN")} token</b></div>` : ""}
     </div>
     <div class="tok-bar-track"><div class="tok-bar-fill ${barCls}" style="width:${Math.max(2, pct)}%;"></div></div>
     <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);" class="num">
@@ -2381,7 +2627,8 @@ async function adminSaveSystem() {
       ultra: document.getElementById("sy-pr-u").value.trim()
     }
   };
-  const r = await apiFetch("/admin/config/save", { method: "POST", body: { system_notice, maintenance, contacts } });
+  const search_config = { engine: document.getElementById("sy-sr-eng")?.value || "duckduckgo", api_key: document.getElementById("sy-sr-key")?.value.trim() || "" };
+  const r = await apiFetch("/admin/config/save", { method: "POST", body: { system_notice, maintenance, contacts, search_config } });
   if (r.ok) { applySystemMeta({ notice: system_notice, maintenance }); haptic("ok"); showToast("Đã lưu cài đặt hệ thống", "ok"); loadAdminData(); }
 }
 async function adminClearSecurityLogs() {
@@ -2486,6 +2733,7 @@ function switchView(v) {
   if (v === "import") renderMemoriesPage();
   if (v === "teams") renderTeamsPage();
   if (v === "tutors") renderTutorsPage();
+  if (v === "mcp") renderMcpPage();
 }
 
 function renderSidebar() { renderNbList(); renderChatsList(); }
@@ -2555,8 +2803,8 @@ function renderSkillsPage() {
   }).join("");
 }
 function openSkillEditor(id = null) { const sk = id ? S.skills.find(x => x.id === id) : null; document.getElementById("sk-id").value = sk?.id || ""; document.getElementById("sk-name").value = sk?.name || ""; document.getElementById("sk-desc").value = sk?.desc || ""; document.getElementById("sk-prompt").value = sk?.prompt || ""; switchView("skill-editor"); }
-async function saveSkill() { const name = document.getElementById("sk-name").value.trim().replace(/\s+/g, "-").replace(/^@/, ""), desc = document.getElementById("sk-desc").value.trim(), prompt = document.getElementById("sk-prompt").value.trim(); if (!name || !prompt) return showToast("Nhập tên và chỉ dẫn"); const sk = { id: document.getElementById("sk-id").value || ("sk-" + Date.now()), name, desc, prompt, builtin: false }; await dbPut("skills", sk); S.skills = await dbAll("skills"); renderSkillStack(); haptic("ok"); showToast(`Đã lưu @${name}`); switchView("customize"); }
-async function delSkill(id) { await dbDel("skills", id); S.skills = S.skills.filter(x => x.id !== id); S.skillIds = S.skillIds.filter(x => x !== id); renderSkillStack(); renderSkillsPage(); renderChips(); }
+async function saveSkill() { const name = document.getElementById("sk-name").value.trim().replace(/\s+/g, "-").replace(/^@/, ""), desc = document.getElementById("sk-desc").value.trim(), prompt = document.getElementById("sk-prompt").value.trim(); if (!name || !prompt) return showToast("Nhập tên và chỉ dẫn"); const sk = { id: document.getElementById("sk-id").value || ("sk-" + Date.now()), name, desc, prompt, builtin: false }; await dbPut("skills", sk); apiFetch("/sync/skills", { method: "POST", body: sk }).catch(() => {}); S.skills = await dbAll("skills"); renderSkillStack(); haptic("ok"); showToast(`Đã lưu @${name}`); switchView("customize"); }
+async function delSkill(id) { await dbDel("skills", id); apiFetch("/sync/skills/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {}); S.skills = S.skills.filter(x => x.id !== id); S.skillIds = S.skillIds.filter(x => x !== id); renderSkillStack(); renderSkillsPage(); renderChips(); }
 async function importSkillFile(files) { const f = files?.[0]; if (!f) return; const sk = { id: "sk-" + Date.now(), name: f.name.replace(/\.(md|txt|json)$/i, ""), desc: "Nhập từ tệp", prompt: await f.text(), builtin: false }; await dbPut("skills", sk); S.skills = await dbAll("skills"); renderSkillStack(); renderSkillsPage(); showToast("Đã nhập kỹ năng"); }
 
 async function saveLib(type, title, data) { const it = { id: "l-" + Date.now() + Math.random(), type, title, data, createdAt: Date.now() }; await dbPut("library", it); S.library.unshift(it); }
@@ -2966,7 +3214,12 @@ function openSharedContextEditor(id) {
 async function saveSharedContext(id) {
   const title = document.getElementById("ctx-title").value.trim() || "boi-canh.md";
   const content = document.getElementById("ctx-body").value.trim();
-  const obj = { id: id || ("ctx-" + Date.now()), title, content, updatedAt: Date.now() };
+  const prev = id ? S.contexts.find(x => x.id === id) : null;
+  const hist = [...(prev?.history || [])];
+  if (prev?.content && prev.content !== content) {
+    hist.unshift({ ts: prev.updatedAt || Date.now(), content: prev.content });
+  }
+  const obj = { id: id || ("ctx-" + Date.now()), title, content, history: hist.slice(0, 5), updatedAt: Date.now() };
   await dbPut("contexts", obj);
   apiFetch("/sync/contexts", { method: "POST", body: obj }).catch(() => {});
   S.contexts = (await dbAll("contexts")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -2990,11 +3243,11 @@ async function deleteSharedContext(id) {
   if (S.activeContextId === id) S.activeContextId = null;
   renderTopContextPill(); openSharedContextManager();
 }
-async function mergeReplyIntoSharedContext(msgId) {
+async function mergeReplyIntoSharedContext(msgId, silent = false) {
   const chat = S.chats.find(c => c.id === S.activeChatId);
   const msg = chat?.messages.find(m => m.id === msgId);
   const replyTxt = msg?.pipeline?.codeOutput || msg?.text || "";
-  if (!replyTxt) return showToast("Không có nội dung để đồng bộ");
+  if (!replyTxt) { if (!silent) showToast("Không có nội dung để đồng bộ"); return; }
 
   let ctx = getActiveContextForChat(chat);
   if (!ctx) {
@@ -3013,6 +3266,7 @@ async function mergeReplyIntoSharedContext(msgId) {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Đồng bộ thất bại");
+    ctx.history = [{ ts: ctx.updatedAt || Date.now(), content: ctx.content }, ...(ctx.history || [])].slice(0, 5);
     ctx.content = d.digest || ctx.content;
     ctx.updatedAt = Date.now();
     await dbPut("contexts", ctx);
@@ -3201,13 +3455,15 @@ function renderTeamsPage() {
         ${!tm.builtin ? `<button type="button" class="btn-danger tap" style="height:36px;font-size:13px;" onclick="deleteCustomTeam('${tm.id}')">Xóa</button>` : ""}
       </div>
     </div>`;
-  }).join("");
+  }).join("") + buildTeamsContextHubHtml();
 }
 
 function openTeamWorkspace(teamId) {
   if (!canUseTeams()) return showToast("Đội ngũ AI yêu cầu Key hạng Pro Max trở lên", "warn");
   S.activeTeamId = teamId;
   S.activeTutorId = null;
+  const tmObj = S.teams.find(t => t.id === teamId);
+  if (tmObj?.contextId) S.activeContextId = tmObj.contextId;
   // Open latest chat of this team or start fresh
   const existing = S.chats.find(c => c.teamId === teamId);
   S.activeChatId = existing ? existing.id : null;
@@ -3276,6 +3532,15 @@ function renderTeamEditorBody() {
       <span>Dừng duyệt kết quả sau Thành viên 1</span>
       <div class="sw ${teamDraft.pauseAfterFirst?"on":""}"></div>
     </div>
+    <label class="f-lbl">Hồ sơ bối cảnh chung gắn cho Team (boi-canh.md)</label>
+    <select class="field" onchange="teamDraft.contextId=this.value||null">
+      <option value="">Không gắn mặc định</option>
+      ${S.contexts.map(c => `<option value="${esc(c.id)}" ${teamDraft.contextId===c.id?"selected":""}>${esc(c.title)}</option>`).join("")}
+    </select>
+    <div class="s-row" style="margin-top:4px;" onclick="teamDraft.autoSyncContext=!teamDraft.autoSyncContext;this.querySelector('.sw').classList.toggle('on',teamDraft.autoSyncContext);haptic('switch')">
+      <span>Tự động hợp nhất kết quả vào boi-canh.md sau khi Team chạy xong</span>
+      <div class="sw ${teamDraft.autoSyncContext?"on":""}"></div>
+    </div>
   </div>
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px;">
@@ -3324,7 +3589,7 @@ async function handleMemberFilePick(files) {
   const mem = teamDraft.members[pickingMemberIdx];
   mem.files = mem.files || [];
   for (const f of files || []) {
-    const txt = (await f.text()).slice(0, 30000);
+    const txt = (await extractRealFileText(f)).text.slice(0, 30000);
     let digest = "";
     if (txt.length > 3500) {
       showToast(`Đang lọc gọn tệp ${f.name} bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"}...`);
@@ -3343,12 +3608,14 @@ async function saveCustomTeam() {
   if (!teamDraft.name.trim()) return showToast("Nhập tên Đội ngũ", "warn");
   if (!teamDraft.members.some(m => m.enabled !== false)) return showToast("Bật ít nhất 1 thành viên", "warn");
   await dbPut("teams", teamDraft);
+  apiFetch("/sync/teams", { method: "POST", body: teamDraft }).catch(() => {});
   S.teams = await dbAll("teams");
   haptic("ok"); showToast(`Đã lưu ${teamDraft.name}`, "ok");
   switchView("teams");
 }
 async function deleteCustomTeam(id) {
   await dbDel("teams", id);
+  apiFetch("/sync/teams/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {});
   S.teams = S.teams.filter(t => t.id !== id);
   if (S.activeTeamId === id) S.activeTeamId = null;
   renderTeamsPage(); haptic("ok"); showToast("Đã xóa Team");
@@ -3476,6 +3743,7 @@ async function runTeamPipeline(chat, team, userPrompt, resumeMsg = null, startAt
 
     aiMsg.text = pipe.codeOutput || lastOutput || "Đội ngũ đã hoàn tất.";
     await savePendingTask(null);
+    if (team.autoSyncContext && (team.contextId || S.activeContextId)) { mergeReplyIntoSharedContext(aiMsg.id, true).catch(() => {}); }
     haptic("ok");
     showToast(`${team.name} đã hoàn tất`, "ok");
     if (document.hidden) bgNotifyDone(`${team.name} đã hoàn tất`, aiMsg.text.replace(/[#*`]/g, "").slice(0, 120));
@@ -3795,7 +4063,7 @@ async function handleTutorFilePick(files) {
   const targetTutor = tutorFileTarget === "base" ? tutorDraft : S.tutors.find(t => t.id === tutorFileTarget);
   if (!targetTutor) return;
   for (const f of files || []) {
-    const txt = (await f.text()).slice(0, 30000);
+    const txt = (await extractRealFileText(f)).text.slice(0, 30000);
     let digest = "";
     if (txt.length > 3500) {
       showToast(`Đang tóm tắt đề/tài liệu ${f.name} bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"}...`);
@@ -3822,6 +4090,7 @@ async function saveTutorProfile() {
   if (!tutorDraft) return;
   if (!tutorDraft.name.trim() || !tutorDraft.subject.trim()) return showToast("Nhập đủ Tên Gia sư và Môn học", "warn");
   await dbPut("tutors", tutorDraft);
+  apiFetch("/sync/tutors", { method: "POST", body: tutorDraft }).catch(() => {});
   S.tutors = await dbAll("tutors");
   syncTutorAlarm(tutorDraft);
   haptic("ok"); showToast(`Đã lưu Gia sư ${tutorDraft.name}`, "ok");
@@ -3830,6 +4099,7 @@ async function saveTutorProfile() {
 async function deleteTutorProfile(id) {
   try { getNativeBg()?.cancelTutorReminder?.({ tutorId: id }); } catch {}
   await dbDel("tutors", id);
+  apiFetch("/sync/tutors/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {});
   S.tutors = S.tutors.filter(t => t.id !== id);
   if (S.activeTutorId === id) S.activeTutorId = null;
   renderTutorsPage(); haptic("ok"); showToast("Đã xóa Gia sư");
@@ -3929,6 +4199,593 @@ async function saveReplyToTutorMistake(tid, msgId) {
   t.mistakes.unshift({ id: "mk-" + Date.now(), note: txt.replace(/[#*`]/g, "").slice(0, 200), stageDays: 1, nextReviewAt: Date.now() + 86400000, mastered: false });
   await dbPut("tutors", t);
   haptic("ok"); showToast("Đã thêm vào Sổ Lỗi Sai (sẽ nhắc ôn sau 1 ngày)", "ok");
+}
+
+
+/* =========================================================================
+   v3.4 MODULE 1: MCP HUB (BUILT-IN TOOLS + REMOTE HTTP/SSE MCP SERVERS — 1B + ĐỘT PHÁ)
+   ========================================================================= */
+const BUILTIN_MCP_META = [
+  { id: "linkReader", name: "Đọc Link & GitHub MCP", desc: "Tự đọc file GitHub, cây Repo (lọc gọn qua GPT 6.2 Sol), YouTube & trang web khi dán link", minTier: "classic" },
+  { id: "webSearch", name: "Tìm kiếm Web Live MCP", desc: "Tự tra cứu thông tin thời sự, giá cả, tài liệu mới nhất kèm thẻ nguồn trích dẫn", minTier: "pro" },
+  { id: "contextSync", name: "Hồ sơ boi-canh.md MCP", desc: "Đọc & đồng bộ 1 file ngữ cảnh chung duy nhất cho mọi model và Đội ngũ AI", minTier: "classic" },
+  { id: "builderAssist", name: "Trợ lý lập Team & Gia sư MCP", desc: "Cho phép API AI thiết kế hộ Đội ngũ AI / Gia sư AI và hiện nút Lưu 1 chạm ngay trong chat", minTier: "pro_max" },
+  { id: "utilities", name: "Tiện ích Ngày giờ & Tính toán MCP", desc: "Cung cấp ngày giờ thực tế (VN) chính xác để tránh AI đoán sai thời gian", minTier: "classic" }
+];
+
+function canUseRemoteMcp() { return S.user?.role === "admin" || ["pro_max", "ultra"].includes(S.user?.keyTier); }
+function canUseWebSearch() { return S.user?.role === "admin" || ["pro", "pro_max", "ultra"].includes(S.user?.keyTier); }
+
+function renderMcpQuickBadge() {
+  const bOn = Object.values(S.cfg.mcpBuiltin || {}).filter(Boolean).length;
+  const rOn = (S.mcpServers || []).filter(s => s.enabled !== false).length;
+  const total = bOn + rOn;
+  const lbl = document.getElementById("mcp-quick-lbl");
+  const btn = document.getElementById("btn-mcp-quick");
+  if (lbl) lbl.textContent = total ? `MCP (${total})` : "MCP";
+  if (btn) btn.classList.toggle("has-active", rOn > 0 || Boolean(S.cfg.mcpBuiltin?.webSearch));
+  const sbB = document.getElementById("sb-mcp-badge");
+  if (sbB) sbB.textContent = rOn ? `${total} bật` : "MCP";
+}
+
+function renderMcpPage() {
+  const box = document.getElementById("mcp-body");
+  if (!box) return;
+  const bi = S.cfg.mcpBuiltin || {};
+  const remoteAllowed = canUseRemoteMcp();
+
+  const builtInHtml = `<div class="card-item lg-card">
+    <strong style="display:block;font-size:15px;margin-bottom:4px;">MCP Tích hợp sẵn (Built-in Tools)</strong>
+    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Bật/tắt tức thì các công cụ thông minh chạy trực tiếp trên máy chủ API AI.</p>
+    ${BUILTIN_MCP_META.map(m => {
+      const on = bi[m.id] !== false;
+      return `<div class="s-row" onclick="toggleBuiltinMcp('${m.id}')">
+        <div style="min-width:0;flex:1;padding-right:8px;">
+          <div style="font-size:14px;font-weight:500;">${esc(m.name)}</div>
+          <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${esc(m.desc)}</div>
+        </div>
+        <div class="sw ${on?"on":""}"></div>
+      </div>`;
+    }).join("")}
+  </div>`;
+
+  const remoteListHtml = !remoteAllowed
+    ? `<div class="card-item lg-card"><strong>Remote MCP Server (HTTP / SSE)</strong><p class="p-sub" style="margin:6px 0 0;">Kết nối máy chủ MCP bên ngoài (Context7, Tavily, Zapier, n8n...) yêu cầu Key hạng <b>Pro Max</b> hoặc <b>Ultra</b>.</p></div>`
+    : `<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px;">
+        <strong style="font-size:15px;">Remote MCP Servers (${(S.mcpServers || []).length})</strong>
+        <button type="button" class="btn-blue tap" style="height:34px;font-size:12.5px;" onclick="openAddMcpServerModal()">+ Kết nối Server</button>
+      </div>
+      ${(S.mcpServers || []).length ? S.mcpServers.map((sv, idx) => `
+        <div class="card-item lg-card stagger-item" style="--stagger-i:${idx}">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div style="min-width:0;flex:1;">
+              <strong>${esc(sv.name)}</strong>
+              <span class="tag-st ${sv.enabled!==false?"st-active":"st-revoked"}">${(sv.tools||[]).length} tools</span>
+              <div style="font-size:11.5px;font-family:var(--font-mono);color:var(--ink-3);margin-top:3px;word-break:break-all;">${esc(sv.url)}</div>
+            </div>
+            <div class="sw ${sv.enabled!==false?"on":""}" onclick="toggleRemoteMcp('${sv.id}')"></div>
+          </div>
+          ${(sv.tools||[]).length ? `<div class="file-tag-list">${sv.tools.slice(0, 8).map(t => `<span class="file-mini-tag">${esc(t.name)}</span>`).join("")}</div>` : ""}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+            <button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="rediscoverMcpServer('${sv.id}')">Quét lại Tools</button>
+            <button type="button" class="btn-danger tap" style="height:32px;font-size:12px;" onclick="deleteMcpServer('${sv.id}')">Xóa</button>
+          </div>
+        </div>`).join("") : `<div class="card-item lg-card" style="color:var(--ink-3);font-size:13px;">Chưa kết nối Remote MCP Server nào. Bấm <b>+ Thêm MCP Server</b> để gắn máy chủ chuẩn HTTP/SSE (ví dụ Context7, Zapier MCP, n8n MCP...).</div>`}`;
+
+  box.innerHTML = builtInHtml + remoteListHtml;
+}
+
+function toggleBuiltinMcp(id) {
+  haptic("switch");
+  S.cfg.mcpBuiltin = S.cfg.mcpBuiltin || { ...DEFAULT_CFG.mcpBuiltin };
+  S.cfg.mcpBuiltin[id] = S.cfg.mcpBuiltin[id] === false ? true : false;
+  dbPut("kv", S.cfg);
+  renderMcpQuickBadge();
+  renderMcpPage();
+}
+
+function openAddMcpServerModal() {
+  if (!canUseRemoteMcp()) return showToast("Remote MCP Server yêu cầu Key hạng Pro Max trở lên", "warn");
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:6px;">Kết nối Remote MCP Server</h3>
+    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Hỗ trợ chuẩn Streamable HTTP / SSE (JSON-RPC 2.0). Hệ thống tự quét <code>tools/list</code> và bảo vệ SSRF.</p>
+    <label class="f-lbl">Tên hiển thị</label><input id="mcp-name" class="field" placeholder="VD: Context7 Docs, n8n Agent" />
+    <label class="f-lbl">MCP Endpoint URL (https://...)</label><input id="mcp-url" class="field" placeholder="https://mcp.example.com/mcp" />
+    <label class="f-lbl">Bearer Token / API Key (tùy chọn)</label><input id="mcp-tok" type="password" class="field" placeholder="Để trống nếu server public" />
+    <div id="mcp-st" style="font-size:12.5px;color:var(--accent-ink);margin-top:8px;min-height:18px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button type="button" class="btn-s tap" onclick="closeModal()">Hủy</button>
+      <button type="button" id="mcp-save-btn" class="btn-p tap" onclick="commitNewMcpServer()">Quét Tools & Lưu</button>
+    </div>`);
+}
+
+async function commitNewMcpServer() {
+  const name = document.getElementById("mcp-name").value.trim();
+  const url = document.getElementById("mcp-url").value.trim();
+  const tok = document.getElementById("mcp-tok").value.trim();
+  const st = document.getElementById("mcp-st"), btn = document.getElementById("mcp-save-btn");
+  if (!name || !url.startsWith("http")) return showToast("Nhập đủ Tên và URL hợp lệ", "warn");
+  const headers = tok ? { Authorization: `Bearer ${tok}` } : {};
+  btn.disabled = true; st.textContent = "Đang gọi tools/list từ MCP Server...";
+  try {
+    const r = await apiFetch("/mcp/discover", { method: "POST", body: { url, headers } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Không kết nối được MCP Server");
+    const sv = { id: "mcp-" + Date.now(), name, url, headers, enabled: true, tools: d.tools || [], updatedAt: Date.now() };
+    await dbPut("mcp", sv);
+    apiFetch("/sync/mcp", { method: "POST", body: sv }).catch(() => {});
+    S.mcpServers = await dbAll("mcp");
+    closeModal(); renderMcpQuickBadge(); renderMcpPage(); haptic("ok");
+    showToast(`Đã kết nối ${name} (${sv.tools.length} công cụ)`, "ok");
+  } catch (e) {
+    haptic("err"); st.textContent = "Lỗi: " + e.message;
+  } finally { btn.disabled = false; }
+}
+
+async function toggleRemoteMcp(id) {
+  haptic("switch");
+  const sv = S.mcpServers.find(x => x.id === id); if (!sv) return;
+  sv.enabled = sv.enabled === false ? true : false;
+  await dbPut("mcp", sv);
+  apiFetch("/sync/mcp", { method: "POST", body: sv }).catch(() => {});
+  renderMcpQuickBadge(); renderMcpPage();
+}
+async function rediscoverMcpServer(id) {
+  const sv = S.mcpServers.find(x => x.id === id); if (!sv) return;
+  showToast(`Đang quét lại tools từ ${sv.name}...`);
+  try {
+    const r = await apiFetch("/mcp/discover", { method: "POST", body: { url: sv.url, headers: sv.headers } });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error);
+    sv.tools = d.tools || []; sv.updatedAt = Date.now();
+    await dbPut("mcp", sv);
+    apiFetch("/sync/mcp", { method: "POST", body: sv }).catch(() => {});
+    renderMcpPage(); haptic("ok"); showToast(`Tìm thấy ${sv.tools.length} tools`, "ok");
+  } catch (e) { haptic("err"); showToast(e.message, "err"); }
+}
+async function deleteMcpServer(id) {
+  await dbDel("mcp", id);
+  apiFetch("/sync/mcp/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {});
+  S.mcpServers = S.mcpServers.filter(x => x.id !== id);
+  renderMcpQuickBadge(); renderMcpPage(); haptic("ok"); showToast("Đã xóa MCP Server");
+}
+
+/* =========================================================================
+   v3.4 MODULE 2: PRE-FLIGHT VISUAL STEP ENGINE (SMART LINK + WEB SEARCH + REMOTE MCP — video_1.mp4!)
+   ========================================================================= */
+function renderToolStepsBlock(m) {
+  const steps = m.toolSteps || [];
+  if (!steps.length) return "";
+  return `<div class="tool-steps-wrap">${steps.map(st => {
+    const ico = st.status === "running"
+      ? `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>`
+      : (st.status === "err"
+        ? `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>`
+        : `<svg class="check-draw" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`);
+    const hasRaw = Boolean(st.raw);
+    return `<div class="tool-step-card ${st.status}">
+      <button type="button" class="tool-step-head tap-soft" onclick="${hasRaw ? `toggleAcc('ts-${st.id}','tsc-${st.id}')` : ""}">
+        <span class="tool-step-l">
+          <span class="tool-step-ico">${ico}</span>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(st.label)}</span>
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;font-size:11px;color:var(--ink-3);" class="num">
+          ${st.ms ? `${(st.ms / 1000).toFixed(1)}s` : ""}
+          ${hasRaw ? `<span id="tsc-${st.id}" class="chev"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>` : ""}
+        </span>
+      </button>
+      ${hasRaw ? `<div id="ts-${st.id}" class="acc-wrap"><div class="acc-inner"><div class="tool-step-raw">${esc(st.raw)}</div></div></div>` : ""}
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function renderSourcesStrip(sources) {
+  if (!Array.isArray(sources) || !sources.length) return "";
+  return `<div class="sources-strip">${sources.map(s => {
+    let host = s.url || "";
+    try { host = new URL(s.url).hostname.replace(/^www\./, ""); } catch {}
+    return `<a class="source-card tap-soft" href="${esc(s.url)}" target="_blank" rel="noopener">
+      <span class="source-host">${esc(host)}</span>
+      <span class="source-title">${esc(s.title || host)}</span>
+    </a>`;
+  }).join("")}</div>`;
+}
+
+function shouldAutoWebSearch(text) {
+  if (S.activeTool === "web_search" || S.activeTool === "deep_research") return true;
+  if (S.cfg.mcpBuiltin?.webSearch === false || !canUseWebSearch()) return false;
+  return /(hôm nay|mới nhất|giá\s+(vàng|xăng|đô|usd|btc|eth|cổ phiếu)|tin\s+tức|thời\s+tiết|tỷ\s+giá|kết\s+quả\s+(bóng|xổ\s+số|thi)|tra\s+cứu\s+web|tìm\s+trên\s+mạng|cập\s+nhật\s+202[567])/i.test(text || "");
+}
+
+async function runPreFlightToolsAndMcp(aiMsg, text, chosenUi) {
+  const ctxBlocks = [];
+  const pushStep = (label) => {
+    const st = { id: "s" + Date.now() + Math.random().toString(36).slice(2, 5), label, status: "running", start: Date.now(), ms: 0, raw: "" };
+    aiMsg.toolSteps.push(st);
+    renderMessages(); scrollToBottom(false);
+    return st;
+  };
+  const endStep = (st, status, label = null, raw = "") => {
+    st.status = status;
+    st.ms = Date.now() - st.start;
+    if (label) st.label = label;
+    if (raw) st.raw = raw.slice(0, 3000);
+    renderMessages(); scrollToBottom(false);
+  };
+
+  // 0. Utility MCP: inject accurate VN date/time
+  if (S.cfg.mcpBuiltin?.utilities !== false) {
+    ctxBlocks.push(`[THỜI GIAN THỰC TẠI VIỆT NAM]: ${new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}`);
+  }
+
+  // 1. Smart URL & GitHub Link Reader (3AB + video_1.mp4)
+  if (S.cfg.mcpBuiltin?.linkReader !== false) {
+    const urls = [...new Set((text || "").match(/https?:\/\/[^\s<>()]+/gi) || [])].slice(0, 2);
+    for (const u of urls) {
+      const cleanU = u.replace(/[.,;!?)]+$/, "");
+      const st = pushStep(`Đang đọc đường link: ${cleanU.slice(0, 46)}...`);
+      try {
+        const r = await apiFetch("/ai/fetch-url", { method: "POST", body: { url: cleanU } });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Không đọc được link");
+        let contentForMain = d.content || "";
+        if (d.kind === "github_repo") {
+          aiMsg.fetchedRepoUrl = cleanU;
+          endStep(st, "done", `Đã đọc Repo ${d.title} (${d.meta?.fileCount || 0} tệp${d.cached ? " · Cache" : ""})`, contentForMain);
+          // Cheap GPT 6.2 Sol digest if main model is expensive (>= x2.0) to avoid 500K token burn!
+          if (Number(chosenUi?.cost_multiplier || 1.2) >= 2.0 && contentForMain.length > 2600) {
+            const st2 = pushStep(`Lọc cấu trúc & phụ thuộc bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"}...`);
+            try {
+              const dr = await apiFetch("/ai/digest", {
+                method: "POST",
+                body: {
+                  readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol",
+                  instruction: `Người dùng gửi repo ${d.title} kèm yêu cầu: "${text.slice(0, 300)}". Trích xuất cấu trúc lõi, dependencies, điểm vào và thông tin cần thiết nhất.`,
+                  content: contentForMain
+                }
+              });
+              if (dr.ok) {
+                const dj = await dr.json();
+                if (dj.digest) { contentForMain = dj.digest; endStep(st2, "done", `Đã tối ưu ngữ cảnh Repo (${dj.readerModel})`, dj.digest); }
+                else endStep(st2, "done", "Đã chuẩn bị ngữ cảnh Repo");
+              } else endStep(st2, "done", "Dùng trực tiếp cấu trúc Repo");
+            } catch { endStep(st2, "done", "Dùng trực tiếp cấu trúc Repo"); }
+          }
+        } else {
+          endStep(st, "done", `Đã đọc ${d.kind === "github_file" ? "file GitHub" : (d.kind === "youtube" ? "YouTube" : "trang web")}: ${d.title || cleanU}`, contentForMain);
+        }
+        aiMsg.sources.push({ title: d.title || cleanU, url: cleanU });
+        ctxBlocks.push(`[DỮ LIỆU ĐÃ ĐỌC TỪ LINK ${cleanU}]:\n${contentForMain}`);
+      } catch (e) {
+        endStep(st, "err", `Không đọc được link: ${e.message}`);
+      }
+    }
+  }
+
+  // 2. Live Web Search MCP (6B)
+  if (shouldAutoWebSearch(text) && canUseWebSearch()) {
+    const st = pushStep("Đang tìm kiếm Web thời gian thực...");
+    try {
+      const r = await apiFetch("/ai/web-search", { method: "POST", body: { query: text.replace(/https?:\/\/\S+/g, "").trim().slice(0, 220) } });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Lỗi tìm kiếm");
+      const items = d.results || [];
+      items.forEach(it => aiMsg.sources.push({ title: it.title, url: it.url }));
+      const txt = items.map((it, i) => `[${i + 1}] ${it.title} (${it.url})\n${it.snippet}`).join("\n\n");
+      endStep(st, "done", `Tìm kiếm Web (${items.length} nguồn liên quan)`, txt);
+      if (items.length) ctxBlocks.push(`[KẾT QUẢ TÌM KIẾM WEB TRỰC TIẾP]:\n${txt}`);
+    } catch (e) {
+      endStep(st, "err", `Tìm kiếm Web thất bại: ${e.message}`);
+    }
+  }
+
+  // 3. Remote MCP Server Tool Calling (1B + Đột phá)
+  const activeMcps = (S.mcpServers || []).filter(s => s.enabled !== false && (s.tools || []).length);
+  if (activeMcps.length && canUseRemoteMcp()) {
+    const catalog = [];
+    activeMcps.forEach(sv => (sv.tools || []).slice(0, 12).forEach(t => catalog.push({ serverId: sv.id, serverName: sv.name, toolName: t.name, desc: t.description })));
+    const planStep = pushStep(`MCP Router đang kiểm tra ${catalog.length} công cụ...`);
+    try {
+      const pr = await apiFetch("/ai/digest", {
+        method: "POST",
+        body: {
+          readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol",
+          instruction: `Danh sách MCP tools: ${JSON.stringify(catalog.map(c => ({ serverId: c.serverId, toolName: c.toolName, desc: c.desc })))}. Nếu yêu cầu người dùng CẦN gọi 1-2 tool ở trên để lấy dữ liệu thật, trả về ĐÚNG 1 mảng JSON: [{"serverId":"...","toolName":"...","arguments":{...}}]. Nếu không cần gọi tool nào, trả về đúng []. KHÔNG viết chữ giải thích.`,
+          content: `Yêu cầu người dùng: ${text}`
+        }
+      });
+      let calls = [];
+      if (pr.ok) {
+        const pj = await pr.json();
+        const jm = String(pj.digest || "").match(/\[[\s\S]*\]/);
+        if (jm) { try { calls = JSON.parse(jm[0]); } catch {} }
+      }
+      if (!Array.isArray(calls) || !calls.length) {
+        endStep(planStep, "done", "MCP: Trả lời trực tiếp không cần gọi tool ngoài");
+      } else {
+        endStep(planStep, "done", `MCP chọn ${Math.min(2, calls.length)} công cụ phù hợp`);
+        for (const call of calls.slice(0, 2)) {
+          const sv = activeMcps.find(x => x.id === call.serverId);
+          if (!sv) continue;
+          const tSt = pushStep(`MCP gọi ${sv.name} · ${call.toolName}...`);
+          try {
+            const cr = await apiFetch("/mcp/call", { method: "POST", body: { url: sv.url, headers: sv.headers, toolName: call.toolName, arguments: call.arguments || {} } });
+            const cj = await cr.json();
+            if (!cr.ok) throw new Error(cj.error || "Tool error");
+            endStep(tSt, "done", `MCP ${sv.name} · ${call.toolName}`, cj.text || "");
+            ctxBlocks.push(`[KẾT QUẢ TỪ MCP ${sv.name}/${call.toolName}]:\n${cj.text || ""}`);
+          } catch (e) {
+            endStep(tSt, "err", `MCP ${call.toolName} lỗi: ${e.message}`);
+          }
+        }
+      }
+    } catch {
+      endStep(planStep, "done", "MCP bỏ qua bước gọi tool ngoài");
+    }
+  }
+
+  return ctxBlocks.join("\n\n");
+}
+
+async function quickImportRepoFromLink(repoUrl) {
+  if (!canUseGithubSkills()) return showToast("Cần Key hạng Pro Max trở lên để lưu Repo vào Skills", "warn");
+  openGithubImportModal();
+  setTimeout(() => {
+    const ip = document.getElementById("gh-url");
+    if (ip) ip.value = repoUrl;
+  }, 50);
+}
+function sendRepoTaskToTeam(repoUrl, msgId) {
+  if (!canUseTeams()) return showToast("Đội ngũ AI yêu cầu Key hạng Pro Max trở lên", "warn");
+  const txt = getMsgText(msgId);
+  openTeamWorkspace(S.teams[0]?.id || "team-coding-4agent");
+  const ta = document.getElementById("prompt-in");
+  if (ta) {
+    ta.value = `Dựa trên Repo ${repoUrl} và bản phân tích sau, hãy xây dựng giải pháp hoàn chỉnh:\n\n${txt.slice(0, 1200)}`;
+    autoGrow(); updateOrbButton(); ta.focus();
+  }
+}
+
+/* =========================================================================
+   v3.4 MODULE 3: BOI-CANH.MD UPGRADE HUB INSIDE TEAMS + 5-VERSION ROLLBACK (2AB + ĐỘT PHÁ)
+   ========================================================================= */
+function buildTeamsContextHubHtml() {
+  return `<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 8px;">
+    <div>
+      <strong style="font-size:15px;">Hồ sơ Bối cảnh Chung (boi-canh.md)</strong>
+      <div style="font-size:12px;color:var(--ink-3);">Bản nâng cấp dùng chung cho mọi thành viên GPT & Claude · Lưu lịch sử 5 phiên bản</div>
+    </div>
+    <button type="button" class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="openSharedContextEditor(null)">+ Tạo boi-canh.md</button>
+  </div>
+  ${S.contexts.length ? S.contexts.map((c, idx) => `
+    <div class="card-item lg-card stagger-item" style="--stagger-i:${idx}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+        <strong style="font-family:var(--font-mono);font-size:13.5px;">${esc(c.title)}</strong>
+        <span class="tag-quiet num">${(c.history || []).length} bản lưu cũ</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-2);margin-top:5px;white-space:pre-line;">${esc((c.content || "").slice(0, 180))}${(c.content||"").length>180?"...":""}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+        <button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="openSharedContextEditor('${c.id}')">Xem / Sửa</button>
+        ${(c.history || []).length ? `<button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="openContextHistoryModal('${c.id}')">Khôi phục phiên bản (${c.history.length})</button>` : ""}
+        <button type="button" class="btn-danger tap" style="height:32px;font-size:12px;" onclick="deleteSharedContext('${c.id}');renderTeamsPage()">Xóa</button>
+      </div>
+    </div>`).join("") : `<div class="card-item lg-card" style="font-size:13px;color:var(--ink-3);">Chưa có hồ sơ <b>boi-canh.md</b>. Tạo 1 file dùng chung để các thành viên trong Team luôn đồng bộ cùng 1 nguồn sự thật.</div>`}`;
+}
+
+function openContextHistoryModal(ctxId) {
+  const c = S.contexts.find(x => x.id === ctxId); if (!c) return;
+  const hist = c.history || [];
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:6px;">Lịch sử phiên bản · ${esc(c.title)}</h3>
+    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Khôi phục lại tối đa 5 phiên bản trước đó chỉ với 1 chạm.</p>
+    <div style="max-height:55dvh;overflow-y:auto;">
+      ${hist.map((h, i) => `<div class="card-item lg-card" style="padding:10px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <strong style="font-size:12.5px;">Bản cũ #${i + 1} · ${new Date(h.ts).toLocaleString("vi-VN")}</strong>
+          <button type="button" class="btn-blue tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="restoreContextVersion('${c.id}',${i})">Khôi phục</button>
+        </div>
+        <div style="font-size:12px;color:var(--ink-2);white-space:pre-line;">${esc((h.content || "").slice(0, 180))}...</div>
+      </div>`).join("")}
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px;"><button type="button" class="btn-s tap" onclick="closeModal()">Đóng</button></div>`);
+}
+async function restoreContextVersion(ctxId, histIdx) {
+  const c = S.contexts.find(x => x.id === ctxId); if (!c || !c.history?.[histIdx]) return;
+  const target = c.history[histIdx];
+  c.history = [{ ts: c.updatedAt || Date.now(), content: c.content }, ...c.history.filter((_, i) => i !== histIdx)].slice(0, 5);
+  c.content = target.content; c.updatedAt = Date.now();
+  await dbPut("contexts", c);
+  apiFetch("/sync/contexts", { method: "POST", body: c }).catch(() => {});
+  closeModal(); renderTeamsPage(); haptic("ok"); showToast(`Đã khôi phục ${c.title}`, "ok");
+}
+
+/* =========================================================================
+   v3.4 MODULE 4: CONVERSATIONAL & 1-TAP AI BUILDER FOR TEAMS & TUTORS (4AB + ĐỘT PHÁ)
+   ========================================================================= */
+function openAiAssistBuilderModal(kind) {
+  if ((kind === "team" && !canUseTeams()) || (kind === "tutor" && !canUseTutors())) {
+    return showToast("Tính năng này yêu cầu Key hạng Pro Max trở lên", "warn");
+  }
+  const isTeam = kind === "team";
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:6px;">${isTeam ? "Nhờ API AI thiết lập Đội ngũ hộ" : "Nhờ API AI lập Gia sư môn học hộ"}</h3>
+    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">${isTeam ? "Chỉ cần mô tả mục tiêu công việc, AI sẽ tự thiết kế 2–6 thành viên, phân vai trò, prompt chuẩn và chọn model tối ưu cho bạn." : "Nhập môn học & mục tiêu, AI sẽ tự chọn khung giờ không bị trùng lịch với các gia sư khác, viết phong cách dạy và câu nhắc học."}</p>
+    <textarea id="aib-goal" class="field" rows="3" placeholder="${isTeam ? "VD: Lập team xây kịch bản & phân tích kênh TikTok công nghệ..." : "VD: Lập gia sư ôn thi THPT Quốc gia môn Tiếng Anh, nghiêm khắc, hay bẫy từ vựng..."}"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button type="button" class="btn-s tap" onclick="closeModal()">Hủy</button>
+      <button type="button" class="btn-p tap" onclick="launchAiAssistBuilder('${kind}')">Thiết kế ngay</button>
+    </div>`);
+}
+function launchAiAssistBuilder(kind) {
+  const goal = document.getElementById("aib-goal")?.value.trim();
+  if (!goal) return showToast("Nhập mục tiêu bạn muốn thiết lập", "warn");
+  closeModal();
+  S.activeTeamId = null; S.activeTutorId = null; S.activeChatId = null;
+  switchView("chat"); setWorkMode("chat", false);
+  const prompt = kind === "team"
+    ? `Hãy thiết kế hộ tôi một Đội ngũ AI (Team) hoàn chỉnh kèm khối apiai-builder để tôi bấm lưu dùng ngay cho mục tiêu: ${goal}`
+    : `Hãy lập hộ tôi một Gia sư AI hoàn chỉnh (tự chọn khung giờ trống không trùng các gia sư hiện có) kèm khối apiai-builder để tôi bấm lưu học ngay cho mục tiêu: ${goal}`;
+  sendPrompt(prompt);
+}
+
+async function applyAiBuilderCard(bid, saveDirect) {
+  const obj = builderPayloadMap.get(bid);
+  if (!obj) return showToast("Không tìm thấy dữ liệu đề xuất", "err");
+  const mods = getAllowedRealModels();
+  const defMod = mods[0]?.id || "gpt-6.2-sol";
+
+  if (obj.kind === "team") {
+    if (!canUseTeams()) return showToast("Đội ngũ AI yêu cầu Key hạng Pro Max trở lên", "warn");
+    const built = {
+      id: "team-" + Date.now(),
+      name: String(obj.name || "Team mới").slice(0, 60),
+      desc: String(obj.desc || "").slice(0, 180),
+      builtin: false,
+      coordMode: obj.coordMode === "council" ? "council" : "sequential",
+      pauseAfterFirst: Boolean(obj.pauseAfterFirst),
+      maxFixLoops: Math.max(0, Math.min(2, Number(obj.maxFixLoops || 0))),
+      members: (Array.isArray(obj.members) ? obj.members : []).slice(0, 6).map((m, i) => ({
+        id: "m-" + Date.now() + "-" + i,
+        role: String(m.role || `Thành viên ${i + 1}`),
+        prompt: String(m.prompt || ""),
+        modelId: mods.some(x => x.id === m.modelId) ? m.modelId : defMod,
+        enabled: true,
+        files: []
+      }))
+    };
+    if (built.members.length < 2) return showToast("Team cần ít nhất 2 thành viên", "warn");
+    if (saveDirect) {
+      await dbPut("teams", built);
+      apiFetch("/sync/teams", { method: "POST", body: built }).catch(() => {});
+      S.teams = await dbAll("teams");
+      haptic("ok"); showToast(`Đã lưu & mở ${built.name}`, "ok");
+      openTeamWorkspace(built.id);
+    } else {
+      teamDraft = built; switchView("team-editor"); renderTeamEditorBody();
+    }
+    return;
+  }
+
+  if (obj.kind === "tutor") {
+    if (!canUseTutors()) return showToast("Gia sư AI yêu cầu Key hạng Pro Max trở lên", "warn");
+    const built = {
+      id: "tutor-" + Date.now(),
+      name: String(obj.name || "Gia sư AI").slice(0, 50),
+      subject: String(obj.subject || "Học tập").slice(0, 50),
+      prompt: String(obj.prompt || "Giảng dễ hiểu, trọng tâm thực chiến."),
+      modelId: obj.modelId === "auto_tutor" || mods.some(x => x.id === obj.modelId) ? obj.modelId : "auto_tutor",
+      scheduleDays: Array.isArray(obj.scheduleDays) && obj.scheduleDays.length ? obj.scheduleDays : [1, 3, 5],
+      scheduleTime: /^\d{2}:\d{2}$/.test(String(obj.scheduleTime || "")) ? obj.scheduleTime : "20:00",
+      reminderEnabled: true,
+      reminderText: String(obj.reminderText || `Nay chưa vào học ${obj.subject || ""} à?`),
+      baseFiles: [], classNotes: [], mistakes: [], studiedDates: [], streak: 0
+    };
+    // Auto-resolve any schedule conflict automatically!
+    const cfs = findScheduleConflicts(built);
+    if (cfs.length) built.scheduleTime = cfs[0].suggested;
+
+    if (saveDirect) {
+      await dbPut("tutors", built);
+      apiFetch("/sync/tutors", { method: "POST", body: built }).catch(() => {});
+      S.tutors = await dbAll("tutors");
+      syncTutorAlarm(built);
+      haptic("ok"); showToast(`Đã lưu Gia sư ${built.name} (${built.scheduleTime})`, "ok");
+      openTutorWorkspace(built.id);
+    } else {
+      tutorDraft = built; switchView("tutor-editor"); renderTutorEditorBody();
+    }
+  }
+}
+
+/* =========================================================================
+   v3.4 MODULE 5: KATEX MATH, EDIT MESSAGE, REGENERATE, EXPORT & ADMIN BONUS TOKENS (6A + 6C)
+   ========================================================================= */
+function typesetMathInElement(el) {
+  if (!el || typeof window.renderMathInElement !== "function") return;
+  try {
+    window.renderMathInElement(el, {
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "\\[", right: "\\]", display: true },
+        { left: "$", right: "$", display: false },
+        { left: "\\(", right: "\\)", display: false }
+      ],
+      throwOnError: false
+    });
+  } catch {}
+}
+
+function editUserMessage(msgId) {
+  if (S.streaming) return;
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const idx = chat?.messages.findIndex(m => m.id === msgId);
+  if (idx === undefined || idx < 0) return;
+  const orig = chat.messages[idx].text || "";
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Chỉnh sửa tin nhắn & Gửi lại</h3>
+    <textarea id="ed-msg-ta" class="field" rows="4">${esc(orig)}</textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button type="button" class="btn-s tap" onclick="closeModal()">Hủy</button>
+      <button type="button" class="btn-p tap" onclick="commitEditUserMessage('${msgId}')">Gửi lại</button>
+    </div>`);
+}
+async function commitEditUserMessage(msgId) {
+  const txt = document.getElementById("ed-msg-ta")?.value.trim();
+  if (!txt) return showToast("Tin nhắn không được để trống", "warn");
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const idx = chat?.messages.findIndex(m => m.id === msgId);
+  if (idx === undefined || idx < 0) return;
+  chat.messages = chat.messages.slice(0, idx);
+  closeModal();
+  await sendPrompt(txt);
+}
+
+async function regenerateReply(aiMsgId) {
+  if (S.streaming) return;
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const idx = chat?.messages.findIndex(m => m.id === aiMsgId);
+  if (idx === undefined || idx < 0) return;
+  const prevUser = [...chat.messages.slice(0, idx)].reverse().find(m => m.role === "user");
+  if (!prevUser) return;
+  chat.messages = chat.messages.slice(0, idx);
+  haptic("tap");
+  await sendPrompt(prevUser.text, { reuseLastUser: true });
+}
+
+function exportMsgFile(msgId, fmt) {
+  const txt = getMsgText(msgId);
+  if (!txt) return showToast("Không có nội dung để xuất");
+  const content = fmt === "html"
+    ? `<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><title>API AI Export</title><style>body{font-family:-apple-system,sans-serif;max-width:760px;margin:32px auto;padding:0 16px;line-height:1.65;color:#111}pre{background:#f3f4f6;padding:12px;border-radius:8px;overflow:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}</style></head><body>${renderMd(txt)}</body></html>`
+    : txt;
+  const blob = new Blob([content], { type: fmt === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `api-ai-export-${Date.now()}.${fmt}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  haptic("ok"); showToast(`Đã xuất file .${fmt}`, "ok");
+}
+
+function adminBonusTokensModal(email, curBonus) {
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:4px;">Cộng Token dự phòng (Add-on)</h3>
+    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">Tài khoản: <b>${esc(email)}</b> · Dự phòng hiện có: <b class="num" style="color:var(--ok-ink);">${Number(curBonus || 0).toLocaleString("vi-VN")} token</b></p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      <button type="button" class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="document.getElementById('abt-val').value='500000'">+500K</button>
+      <button type="button" class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="document.getElementById('abt-val').value='2000000'">+2M</button>
+      <button type="button" class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="document.getElementById('abt-val').value='10000000'">+10M</button>
+    </div>
+    <label class="f-lbl">Số token muốn cộng thêm</label>
+    <input id="abt-val" type="number" class="field num" value="2000000" min="0" />
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button type="button" class="btn-s tap" onclick="closeModal()">Hủy</button>
+      <button type="button" class="btn-p tap" onclick="commitAdminBonusTokens('${esc(email)}')">Cộng ngay</button>
+    </div>`);
+}
+async function commitAdminBonusTokens(email) {
+  const amount = parseInt(document.getElementById("abt-val")?.value || "0", 10);
+  if (!Number.isFinite(amount) || amount <= 0) return showToast("Nhập số token > 0", "warn");
+  const r = await apiFetch("/admin/users/bonus-tokens", { method: "POST", body: { email, amount, mode: "add" } });
+  const d = await r.json();
+  if (!r.ok) return showToast(d.error || "Lỗi cộng token", "err");
+  closeModal(); haptic("ok");
+  showToast(`Đã cộng +${amount.toLocaleString("vi-VN")} token cho ${email}`, "ok");
+  loadAdminData();
 }
 
 boot();
