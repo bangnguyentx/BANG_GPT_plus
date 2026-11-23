@@ -1,4 +1,4 @@
-name: Build & Release Android APK (API AI v3.4)
+name: Build & Release Android APK (API AI v3.5)
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
           RUN_NUM: ${{ github.run_number }}
         run: |
           mkdir -p www
-          for f in index.html app.css app.js skills-pack.js logo.png logo-mark.png; do
+          for f in index.html app.css app.js office-studio.js skills-pack.js logo.png logo-mark.png; do
             if [ -f "$f" ] && [ ! -f "www/$f" ]; then
               cp "$f" "www/$f"
             fi
@@ -280,12 +280,22 @@ jobs:
           import android.app.NotificationManager;
           import android.app.PendingIntent;
           import android.content.Context;
+          import android.content.ContentResolver;
+          import android.content.ContentValues;
           import android.content.Intent;
           import android.content.pm.PackageManager;
+          import android.net.Uri;
           import android.os.Build;
+          import android.os.Environment;
+          import android.provider.MediaStore;
+          import android.util.Base64;
           import androidx.core.app.ActivityCompat;
           import androidx.core.app.NotificationCompat;
           import androidx.core.content.ContextCompat;
+          import androidx.core.content.FileProvider;
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.io.OutputStream;
           import com.getcapacitor.Plugin;
           import com.getcapacitor.PluginCall;
           import com.getcapacitor.PluginMethod;
@@ -393,6 +403,69 @@ jobs:
                       am.cancel(pi);
                   }
                   call.resolve();
+              }
+
+              @PluginMethod
+              public void saveAndOpenFile(PluginCall call) {
+                  try {
+                      Context ctx = getContext();
+                      String b64 = call.getString("base64", "");
+                      String rawName = call.getString("fileName", "document.pdf");
+                      String mime = call.getString("mimeType", "application/octet-stream");
+                      String mode = call.getString("mode", "open");
+                      if (b64 == null || b64.isEmpty()) {
+                          call.reject("Empty file payload");
+                          return;
+                      }
+                      String safeName = rawName.replaceAll("[^a-zA-Z0-9._-]", "_");
+                      byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
+
+                      // 1. Save copy to Android Downloads folder (MediaStore on API 29+)
+                      try {
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                              ContentResolver resolver = ctx.getContentResolver();
+                              ContentValues cv = new ContentValues();
+                              cv.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                              cv.put(MediaStore.Downloads.MIME_TYPE, mime);
+                              cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/API-AI");
+                              Uri dlUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                              if (dlUri != null) {
+                                  try (OutputStream os = resolver.openOutputStream(dlUri)) {
+                                      if (os != null) os.write(bytes);
+                                  }
+                              }
+                          }
+                      } catch (Exception ignored) {}
+
+                      // 2. Write cache copy & open/share with Microsoft Office / WPS / PDF Viewer via FileProvider
+                      File exportDir = new File(ctx.getCacheDir(), "apiai_exports");
+                      if (!exportDir.exists()) exportDir.mkdirs();
+                      File outFile = new File(exportDir, safeName);
+                      try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                          fos.write(bytes);
+                      }
+
+                      if (!"save".equals(mode)) {
+                          Uri contentUri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider", outFile);
+                          Intent intent;
+                          if ("share".equals(mode)) {
+                              intent = new Intent(Intent.ACTION_SEND);
+                              intent.setType(mime);
+                              intent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                              intent.putExtra(Intent.EXTRA_SUBJECT, safeName);
+                          } else {
+                              intent = new Intent(Intent.ACTION_VIEW);
+                              intent.setDataAndType(contentUri, mime);
+                          }
+                          intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                          Intent chooser = Intent.createChooser(intent, "Mở tệp bằng ứng dụng Office / PDF");
+                          chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                          ctx.startActivity(chooser);
+                      }
+                      call.resolve();
+                  } catch (Exception ex) {
+                      call.reject("Save/Open failed: " + ex.getMessage());
+                  }
               }
           }
           `;
@@ -534,6 +607,16 @@ jobs:
               '    <item name="android:statusBarColor">#07080d</item>\n        <item name="android:navigationBarColor">#07080d</item>\n        <item name="android:windowBackground">#07080d</item>\n    </style>'
             );
             fs.writeFileSync(sPath, styles);
+          }
+
+          const fpPath = "android/app/src/main/res/xml/file_paths.xml";
+          if (fs.existsSync(fpPath)) {
+            let fpx = fs.readFileSync(fpPath, "utf8");
+            if (!fpx.includes("apiai_exports")) {
+              fpx = fpx.replace("</paths>", '    <cache-path name="apiai_exports" path="apiai_exports/" />
+</paths>');
+              fs.writeFileSync(fpPath, fpx);
+            }
           }
 
           const rootGradlePath = "android/build.gradle";
