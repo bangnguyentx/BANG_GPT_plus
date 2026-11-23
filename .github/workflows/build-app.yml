@@ -3,11 +3,18 @@ name: Build & Release Android APK (API AI v3.4)
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'www/**'
+      - 'capacitor.config.json'
+      - '.github/workflows/build-app.yml'
   workflow_dispatch:
 
 concurrency:
   group: build-apk-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: write
@@ -18,21 +25,21 @@ jobs:
 
     steps:
       - name: Tải mã nguồn
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Cài đặt Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
       - name: Cài đặt Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: "temurin"
           java-version: "17"
 
       - name: Cache Gradle (tăng tốc & chống lỗi 429)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches
@@ -434,8 +441,10 @@ jobs:
       - name: Thay toàn bộ Icon App Android bằng logo.png
         run: |
           if [ -f "www/logo.png" ]; then
-            sudo apt-get update -y
-            sudo apt-get install -y imagemagick
+            if ! command -v convert >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y imagemagick
+            fi
             for spec in "mdpi:48:108" "hdpi:72:162" "xhdpi:96:216" "xxhdpi:144:324" "xxxhdpi:192:432"; do
               IFS=':' read -r D S FG <<< "$spec"
               DIR="android/app/src/main/res/mipmap-$D"
@@ -579,7 +588,7 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk ../API-AI-v2.0.${{ github.run_number }}.apk
 
       - name: Xuất Artifact APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: API-AI-v2.0.${{ github.run_number }}-APK
           path: API-AI-v2.0.${{ github.run_number }}.apk
@@ -587,18 +596,21 @@ jobs:
 
       - name: Xuất file Keystore Base64 lần đầu
         if: steps.keystore.outputs.generated == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: SAVE-TO-SECRET-ANDROID_KEYSTORE_BASE64
           path: keystore-export/ANDROID_KEYSTORE_BASE64.txt
           retention-days: 7
 
       - name: Tạo GitHub Release cho In-App Updater
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2.0.${{ github.run_number }}
-          name: API AI v2.0.${{ github.run_number }}
-          body: |
-            Bản cập nhật API AI v2.0.${{ github.run_number }} (Build #${{ github.run_number }}).
-            Tải file APK bên dưới và bấm Cập nhật trực tiếp không cần gỡ bản cũ.
-          files: API-AI-v2.0.${{ github.run_number }}.apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v2.0.${{ github.run_number }}
+          APK_FILE: API-AI-v2.0.${{ github.run_number }}.apk
+        run: |
+          NOTES="Bản cập nhật API AI ${TAG} (Build #${{ github.run_number }}). Tải file APK bên dưới và bấm Cập nhật trực tiếp không cần gỡ bản cũ."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK_FILE" --clobber
+          else
+            gh release create "$TAG" "$APK_FILE" --title "API AI ${TAG}" --notes "$NOTES"
+          fi
