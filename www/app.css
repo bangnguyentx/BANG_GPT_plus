@@ -1,4 +1,4 @@
-/* hallmark: v2.0.3 | scope: app | genre: modern-minimal | theme: custom-obsidian-ink | posture: restrained | motion: animate-ui-apple-spring | accent: cobalt */
+/* hallmark: v2.0.0 | scope: app | genre: modern-minimal | theme: custom-obsidian-ink | posture: restrained | motion: animate-ui-apple-spring | accent: cobalt */
 /* critique: Neutral ink-tinted obsidian ramp, single cobalt accent (<5%), 4px grid, concentric radii, zero literal colors past :root, transform/opacity motion only, full reduced-motion/transparency/contrast parity */
 /* waive: none */
 
@@ -1693,6 +1693,184 @@ body.low-power-motion *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+
+/* ===== v3.4: MARKDOWN TABLES, KATEX, MCP STEP CARDS (video_1.mp4), SOURCES, BUILDER CARD & KPI GRID ===== */
+.md-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: var(--s-3) 0;
+  border-radius: var(--r-md);
+  border: 1px solid var(--rim);
+  background: var(--surface-0);
+}
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  line-height: 1.45;
+  text-align: left;
+}
+.md th, .md td {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--rim);
+  vertical-align: top;
+}
+.md th {
+  background: var(--surface-1);
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.md tr:last-child td { border-bottom: none; }
+.md tbody tr:nth-child(even) { background: var(--row-hover); }
+
+/* KaTeX math block overflow safety */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--s-2) 0;
+  margin: var(--s-2) 0;
+}
+
+/* Visual Tool / Link / MCP Step Progress Cards (video_1.mp4) */
+.tool-steps-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--s-3);
+  width: 100%;
+}
+.tool-step-card {
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--rim);
+  overflow: hidden;
+  animation: itemSlideIn 200ms var(--ease) backwards;
+}
+.tool-step-card.running { border-color: var(--accent-rim); }
+.tool-step-card.done { border-color: var(--ok-rim); }
+.tool-step-card.err { border-color: var(--danger-rim); }
+.tool-step-head {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  font-size: 13px;
+  text-align: left;
+  color: var(--ink);
+}
+.tool-step-l {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  flex: 1;
+}
+.tool-step-ico {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--row-active);
+  color: var(--ink-2);
+}
+.tool-step-card.running .tool-step-ico {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.tool-step-card.running .tool-step-ico svg {
+  animation: thinkSpin 1.1s linear infinite;
+}
+.tool-step-card.done .tool-step-ico {
+  background: var(--ok-soft);
+  color: var(--ok-ink);
+}
+.tool-step-card.err .tool-step-ico {
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+}
+.tool-step-raw {
+  padding: var(--s-2) var(--s-3) var(--s-3);
+  border-top: 1px solid var(--rim);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Clickable Web Search Citation Cards (6B) */
+.sources-strip {
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  padding: var(--s-2) 0 2px;
+  scrollbar-width: none;
+}
+.sources-strip::-webkit-scrollbar { display: none; }
+.source-card {
+  flex: 0 0 auto;
+  max-width: 230px;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--rim-hi);
+  text-decoration: none;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+@media (hover: hover) { .source-card:hover { background: var(--row-active); border-color: var(--accent-rim); } }
+.source-host { font-size: 11px; color: var(--accent-ink); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.source-title { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Conversational AI Builder Preview Card (4AB) */
+.builder-card {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--accent-rim);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/* User message inline edit action */
+.user-msg-acts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.72;
+}
+.user-msg-acts:hover { opacity: 1; }
+
+/* Admin KPI Dashboard Grid (6C) */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+@media (min-width: 640px) { .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.kpi-card {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--g-card);
+  border: 1px solid var(--rim);
+}
+.kpi-lbl { font-size: 12px; color: var(--ink-3); }
+.kpi-val { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); margin-top: 4px; }
 
 /* Accessibility Parity (Apple Design §14 + Hallmark Floor 7) */
 @media (prefers-reduced-motion: reduce) {
