@@ -1096,8 +1096,7 @@ function buildSystemPrompt(chat, query, hasImgs, handoffSummary = "", digestedRe
     }
   });
   if (chat?.compactSummary) {
-    arr.push("NGỮ CẢNH DỰ ÁN ĐÃ NÉN (/compact — GIỮ NGUYÊN MẠCH DỰ ÁN NÀY):
-" + chat.compactSummary);
+    arr.push("NGỮ CẢNH DỰ ÁN ĐÃ NÉN (/compact — GIỮ NGUYÊN MẠCH DỰ ÁN NÀY):\n" + chat.compactSummary);
   }
   if (S.activeTool === "canvas") arr.push("CANVAS: Xuất toàn bộ mã hoàn chỉnh chạy độc lập trong ĐÚNG 1 khối ```html ... ```. Nếu có ảnh chụp màn hình đính kèm, bám sát bố cục, màu sắc và sửa triệt để lỗi giao diện.");
   if (S.activeTool === "deep_research") arr.push("DEEP RESEARCH: Phân tích đa chiều có bảng so sánh và kết luận thực tế.");
