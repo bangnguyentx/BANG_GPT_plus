@@ -1,4 +1,4 @@
-/* API AI v3.2 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
+/* API AI v3.3 — Modular Engine (Sticky API + 4-Tier Key Matrix + Multi-Provider + GitHub Repo Skills + Notice/Maintenance) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
@@ -25,6 +25,8 @@ const DEFAULT_CFG = {
   selectedModel: "gpt-6.2-sol", thinkingLevel: "high", workMode: "chat",
   personalIntel: true, imgQuality: "hd", ultraGlass: false, haptics: true,
   blurPx: 18, glassAlpha: 0.78, wallpaper: "",
+  lowPowerMotion: false,
+  repoReaderModel: "gpt-6.2-sol",
   agentCfg: {
     enabledRoles: { architect: true, coder: true, reviewer: true, tester: true },
     models: { architect: "gpt-6.2-astra", coder: "gpt-6.2-sol", reviewer: "gpt-6.2-astra", tester: "gpt-6-luna" },
@@ -36,16 +38,16 @@ const DEFAULT_CFG = {
 const ICON_PIN = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 1 1-1h1V3H7v2h1a1 1 0 0 1 1 1Z"/></svg>`;
 const ICON_X = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
 const ICON_EDIT = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
-const ICON_CHECK = `<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`;
+const ICON_CHECK = `<svg class="check-draw" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`;
 const ICON_LOCK = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
 
 let db = null;
 function openDB() {
   return new Promise((res, rej) => {
-    const req = indexedDB.open("ChatGPTProAppDB_v3", 1);
+    const req = indexedDB.open("ChatGPTProAppDB_v3", 2);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ["chats", "skills", "notebooks", "memories", "library", "kv"].forEach(s => {
+      ["chats", "skills", "notebooks", "memories", "library", "kv", "teams", "tutors", "contexts"].forEach(s => {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: "id" });
       });
     };
@@ -70,6 +72,10 @@ let S = {
   memories: [], lastCrossRecalls: [], library: [], filter: "all",
   activeTool: null, skillIds: [], atts: [], streaming: false, abort: null,
   speakingMsgId: null, rec: null, recording: false, liveMode: false,
+  teams: [], activeTeamId: null,
+  tutors: [], activeTutorId: null,
+  contexts: [], activeContextId: null,
+  pendingTask: null,
   adminData: null, adminTab: "keys", selectedTierTab: "classic", canvasPreviewOnly: false
 };
 
@@ -182,11 +188,28 @@ async function boot() {
   S.notebooks = await dbAll("notebooks");
   S.library = (await dbAll("library")).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
+  // Load Teams (ensure built-in 4-Agent Coding Team exists!)
+  S.teams = await dbAll("teams");
+  await ensureBuiltinCodingTeam();
+  // Load Tutors & Shared Contexts (boi-canh.md)
+  S.tutors = await dbAll("tutors");
+  S.contexts = await dbAll("contexts");
+  S.pendingTask = await dbGet("kv", "pendingTask");
+
   applyTheme();
   renderSkillStack();
+  renderRepoCostStrip();
+  renderTopContextPill();
   bindEvents();
   bindGestures();
   setAuthTab("login");
+  bgRequestNotifyPerm();
+  syncAllTutorAlarms();
+
+  // Deep-link hook from Android Tutor notification tap
+  window.__OPEN_TUTOR_FROM_NOTIF__ = tid => {
+    if (S.tutors.some(t => t.id === tid)) openTutorWorkspace(tid);
+  };
 
   if (!S.cfg.token || !S.cfg.serverUrl) showAuthGate(true);
   else await refreshSession();
@@ -195,6 +218,7 @@ async function boot() {
 
 function applyTheme() {
   document.body.classList.toggle("ultra-glass", Boolean(S.cfg.ultraGlass));
+  document.body.classList.toggle("low-power-motion", Boolean(S.cfg.lowPowerMotion));
   document.documentElement.style.setProperty("--blur", `${S.cfg.blurPx}px`);
   document.documentElement.style.setProperty("--g-float", `rgba(22, 25, 34, ${S.cfg.glassAlpha})`);
   const w = document.getElementById("wallpaper");
@@ -235,6 +259,7 @@ function showAuthGate(show) {
 }
 function showKeyGate(show, msg = null) {
   const el = document.getElementById("key-gate"); el.classList.toggle("open", show);
+  if (show) loadPublicPlansMeta();
   if (show) {
     document.getElementById("key-gate-email").textContent = S.user?.email || "-";
     const d = document.getElementById("key-gate-desc");
@@ -441,9 +466,15 @@ async function submitSelfPasswordChange() {
 /* ===== CLOUD SYNC & ACCOUNT UI (HIDES SERVER URL FROM REGULAR USERS!) ===== */
 async function pullCloudData() {
   try {
-    const [rc, rm] = await Promise.all([apiFetch("/sync/chats"), apiFetch("/sync/memories")]);
+    const [rc, rm, rx] = await Promise.all([apiFetch("/sync/chats"), apiFetch("/sync/memories"), apiFetch("/sync/contexts")]);
     if (rc.ok) S.chats = ((await rc.json()).chats || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     if (rm.ok) S.memories = (await rm.json()).memories || [];
+    if (rx.ok) {
+      const cloudCtx = (await rx.json()).contexts || [];
+      for (const c of cloudCtx) await dbPut("contexts", c);
+      S.contexts = (await dbAll("contexts")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      renderTopContextPill();
+    }
   } catch {}
 }
 function syncAccountUI() {
@@ -588,10 +619,12 @@ async function runGithubRepoImport() {
       repo: { owner: res.owner, repo: res.repo, branch: res.branch, subPath: res.subPath, sha: res.sha, pat: pat || "", updatedAt: Date.now() },
       repoFiles: res.files
     };
+    prog.textContent = `Đang tạo bản đồ kiến trúc gọn bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"} để chống tốn token...`;
+    sk.repoIndex = await buildRepoIndexViaCheapReader(sk);
     await dbPut("skills", sk);
     S.skills = await dbAll("skills");
-    renderSkillStack(); renderSkillsPage(); closeModal();
-    haptic("ok"); showToast(`Đã cài @${slug} (${res.files.length} tệp nguyên trạng)`);
+    renderSkillStack(); renderRepoCostStrip(); renderSkillsPage(); closeModal();
+    haptic("ok"); showToast(`Đã cài @${slug} (${res.files.length} tệp · đã tối ưu chỉ mục)`);
   } catch (e) {
     haptic("err"); prog.textContent = "Lỗi: " + e.message;
   } finally {
@@ -612,6 +645,7 @@ async function pullLatestGithubSkill(skillId) {
     sk.desc = `${res.description} · ${res.files.length} tệp`;
     sk.repo.sha = res.sha;
     sk.repo.updatedAt = Date.now();
+    sk.repoIndex = await buildRepoIndexViaCheapReader(sk);
     await dbPut("skills", sk);
     S.skills = await dbAll("skills");
     renderSkillsPage(); haptic("ok");
@@ -725,7 +759,7 @@ function renderSkillStack() {
   document.getElementById("btn-skill-stack").classList.toggle("has-active", cnt > 0);
   document.getElementById("sk-stack-lbl").textContent = cnt ? `Skills (${cnt})` : "Skills";
 }
-function toggleSkillPill(id) { haptic("switch"); S.skillIds = S.skillIds.includes(id) ? S.skillIds.filter(x => x !== id) : [...S.skillIds, id]; renderSkillStack(); renderChips(); }
+function toggleSkillPill(id) { haptic("switch"); S.skillIds = S.skillIds.includes(id) ? S.skillIds.filter(x => x !== id) : [...S.skillIds, id]; renderSkillStack(); renderRepoCostStrip(); renderChips(); }
 
 /* ===== HD VISION STUDIO ===== */
 function setImgQuality(q) { haptic("tap"); S.cfg.imgQuality = q; dbPut("kv", S.cfg); applyTheme(); showToast(`Chất lượng ảnh: ${q === "fast" ? "Nhanh" : q === "ultra" ? "Siêu nét" : "HD 2048px"}`); }
@@ -841,11 +875,16 @@ function pickModel(id, locked, needTier) {
 }
 function pickThink(id) { haptic("tap"); S.cfg.thinkingLevel = id; dbPut("kv", S.cfg); renderModelDropdown(); closePopovers(); }
 
-function buildSystemPrompt(chat, query, hasImgs, handoffSummary = "") {
+function buildSystemPrompt(chat, query, hasImgs, handoffSummary = "", digestedRepoText = "", tutorExtraSys = "") {
   const arr = ["Bạn là API AI — trợ lý AI trả lời tiếng Việt rõ ràng, sắc sảo và chính xác."];
+  if (tutorExtraSys) arr.push(tutorExtraSys);
+  const ctxObj = getActiveContextForChat(chat);
+  if (ctxObj?.content?.trim()) {
+    arr.push(`HỒ SƠ NGỮ CẢNH CHUNG DUY NHẤT (${ctxObj.title || "boi-canh.md"}) — NGUỒN SỰ THẬT DÙNG CHUNG CHO MỌI MODEL (GPT & CLAUDE):\n${ctxObj.content.slice(0, 6500)}`);
+  }
   if (handoffSummary) arr.push("BỐI CẢNH CHUYỂN TIẾP TỪ API TRƯỚC TRONG CÙNG ĐOẠN CHAT:\n" + handoffSummary);
   if (hasImgs) arr.push("PHÂN TÍCH THỊ GIÁC TOÀN DIỆN: Quan sát toàn bộ vật thể, bố cục, màu sắc, ánh sáng, chi tiết nhỏ, biểu đồ và chữ viết trong ảnh.");
-  if (S.cfg.workMode === "task") arr.push("CHẾ ĐỘ NHIỆM VỤ: Chia yêu cầu thành các bước thực thi cụ thể.");
+  if (S.cfg.workMode === "task" && !tutorExtraSys) arr.push("CHẾ ĐỘ NHIỆM VỤ: Chia yêu cầu thành các bước thực thi cụ thể.");
   const lv = THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel); if (lv) arr.push(`Tư duy (${lv.title}): ${lv.prompt}`);
   if (S.cfg.personalIntel) {
     const mems = S.memories.filter(m => m.enabled !== false);
@@ -855,11 +894,17 @@ function buildSystemPrompt(chat, query, hasImgs, handoffSummary = "") {
     if (S.lastCrossRecalls.length) arr.push("GỢI NHỚ CROSS-CHAT:\n" + S.lastCrossRecalls.map(r => `- [${r.chatTitle}] ${r.snippet}`).join("\n"));
   } else S.lastCrossRecalls = [];
   if (S.activeNbId) { const nb = S.notebooks.find(n => n.id === S.activeNbId); if (nb) arr.push(`SỔ GHI CHÚ "${nb.title}":\n${nb.notes}`); }
+  if (digestedRepoText) {
+    arr.push(digestedRepoText);
+  }
   S.skillIds.forEach(id => {
     const sk = S.skills.find(x => x.id === id);
     if (!sk) return;
-    if (sk.repoFiles?.length) arr.push(retrieveRepoSkillContext(sk, query));
-    else arr.push(`KỸ NĂNG @${sk.name}:\n${sk.prompt}`);
+    if (sk.repoFiles?.length) {
+      if (!digestedRepoText) arr.push(retrieveCompactRepoContext(sk, query));
+    } else {
+      arr.push(`KỸ NĂNG @${sk.name}:\n${(sk.prompt || "").slice(0, 5000)}`);
+    }
   });
   if (S.activeTool === "canvas") arr.push("CANVAS: Xuất toàn bộ mã trong 1 khối ```html ... ```.");
   if (S.activeTool === "deep_research") arr.push("DEEP RESEARCH: Phân tích đa chiều có bảng so sánh và kết luận thực tế.");
@@ -1197,6 +1242,10 @@ async function runFourAgentPipeline(chat, userPrompt, resumeMsg = null) {
     aiMsg.text = `Dây chuyền dừng: ${e.message}`;
   } finally {
     aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
+    bgStopTask();
+    if (document.hidden && aiMsg.text) {
+      bgNotifyDone(activeTutor ? `Gia sư ${activeTutor.name} đã trả lời` : "API AI đã trả lời xong", aiMsg.text.replace(/[#*`]/g, "").slice(0, 120));
+    }
     apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
     syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
   }
@@ -1260,11 +1309,18 @@ async function sendPrompt(overrideText = null, opts = {}) {
   });
   renderSkillStack();
 
+  const activeTeam = S.activeTeamId ? S.teams.find(t => t.id === S.activeTeamId) : null;
+  const activeTutor = S.activeTutorId ? S.tutors.find(t => t.id === S.activeTutorId) : null;
+
   let chat = S.chats.find(c => c.id === S.activeChatId);
   if (!chat) {
+    const prefix = activeTeam ? `[Team: ${activeTeam.name}] ` : (activeTutor ? `[Gia sư ${activeTutor.subject}] ` : "");
     chat = {
-      id: "c-" + Date.now(), title: (text || S.atts[0]?.name || "Cuộc trò chuyện mới").slice(0, 42),
-      pinned: false, mode: S.cfg.workMode, nbId: S.activeNbId,
+      id: "c-" + Date.now(), title: (prefix + (text || S.atts[0]?.name || "Cuộc trò chuyện mới")).slice(0, 48),
+      pinned: false, mode: activeTeam ? "team" : (activeTutor ? "tutor" : S.cfg.workMode),
+      teamId: activeTeam?.id || null, tutorId: activeTutor?.id || null,
+      contextId: S.activeContextId || null,
+      nbId: S.activeNbId,
       pinnedProvider: null, pinnedKeyIndex: null, pinnedSlotLabel: "",
       updatedAt: Date.now(), messages: []
     };
@@ -1274,21 +1330,43 @@ async function sendPrompt(overrideText = null, opts = {}) {
   let sentAtts = [];
   if (!opts.reuseLastUser) {
     sentAtts = [...S.atts];
-    chat.messages.push({ id: "m-" + Date.now(), role: "user", text, atts: sentAtts, ts: Date.now() });
+    const autoDetectNewKnowledge = activeTutor && detectNewClassKnowledge(text);
+    chat.messages.push({
+      id: "m-" + Date.now(), role: "user", text, atts: sentAtts,
+      suggestSaveTutorId: autoDetectNewKnowledge ? activeTutor.id : null,
+      ts: Date.now()
+    });
     chat.updatedAt = Date.now();
     if (overrideText === null) { input.value = ""; autoGrow(); }
     S.atts = []; renderChips(); renderMessages(); renderChatsList(); scrollToBottom(true);
   }
 
-  if (S.cfg.workMode === "four_agent" && !opts.forceSwitch) {
-    return runFourAgentPipeline(chat, text);
+  if (activeTeam && !opts.forceSwitch) {
+    return runTeamPipeline(chat, activeTeam, text);
   }
-  const autoImgPrompt = S.activeTool === "image" ? text : (!sentAtts.length && !opts.forceSwitch ? detectImageIntent(text, chat) : null);
+  const autoImgPrompt = (!activeTutor && S.activeTool === "image") ? text : (!activeTutor && !sentAtts.length && !opts.forceSwitch ? detectImageIntent(text, chat) : null);
   if (autoImgPrompt) return runGenImage(chat, autoImgPrompt);
 
-  const sysPrompt = buildSystemPrompt(chat, text, sentAtts.some(a => a.dataUrl), opts.handoffSummary || "");
+  // Determine model (Auto Tutor smart routing if inside Tutor!)
+  let chosenUi = S.models.find(m => m.id === S.cfg.selectedModel) || S.models.find(x => x.allowed) || S.models[0];
+  let tutorExtraSys = "";
+  if (activeTutor) {
+    await markTutorStudiedToday(activeTutor);
+    const resolvedId = resolveTutorModelId(activeTutor, text);
+    chosenUi = S.models.find(m => m.id === resolvedId && m.allowed) || chosenUi;
+    tutorExtraSys = await buildTutorSystemPrompt(activeTutor, text);
+  }
+
+  // 4A: Cheap Reader Digest for active GitHub Repos before calling expensive models (>= x2.0)
+  let digestedRepoText = "";
+  const activeRepoSkills = S.skillIds.map(id => S.skills.find(x => x.id === id)).filter(sk => sk?.repoFiles?.length);
+  if (activeRepoSkills.length) {
+    digestedRepoText = await digestActiveReposForQuery(activeRepoSkills, text, chosenUi);
+  }
+
+  const sysPrompt = buildSystemPrompt(chat, text, sentAtts.some(a => a.dataUrl), opts.handoffSummary || "", digestedRepoText, tutorExtraSys);
   renderMemoryBar();
-  const chosenUi = S.models.find(m => m.id === S.cfg.selectedModel) || S.models.find(x => x.allowed) || S.models[0];
+  bgStartTask(activeTutor ? `Gia sư ${activeTutor.name} đang soạn bài` : "API AI đang trả lời", `${chosenUi.short || chosenUi.title} · giữ kết nối nền`);
   const aiMsg = {
     id: "m-" + (Date.now() + 1), role: "assistant", text: "", thinking: "", thinkingLevel: S.cfg.thinkingLevel || "high", thinkMs: 0,
     modelLabel: `${chosenUi.short || chosenUi.title} · ${THINK_LEVELS.find(x => x.id === S.cfg.thinkingLevel)?.title || "Cao"}`,
@@ -1315,6 +1393,7 @@ async function sendPrompt(overrideText = null, opts = {}) {
       method: "POST",
       body: {
         chatId: chat.id,
+        mode: activeTutor ? "tutor" : "chat",
         uiModelId: chosenUi.id,
         thinkingLevel: S.cfg.thinkingLevel || "high",
         tool: S.activeTool,
@@ -1519,13 +1598,27 @@ function copyCodeBtn(btn, txt) { haptic("ok"); copyText(txt, "Đã sao chép"); 
 
 function renderMessages() {
   const hero = document.getElementById("empty-hero"), list = document.getElementById("messages"), chat = S.chats.find(c => c.id === S.activeChatId);
-  if (!chat || !chat.messages.length) { hero.style.display = "flex"; list.innerHTML = ""; return; }
+  const activeTutor = S.activeTutorId ? S.tutors.find(t => t.id === S.activeTutorId) : null;
+  const tutorCardHtml = activeTutor ? buildTutorProactiveBanner(activeTutor) : "";
+  const resumeHtml = buildPendingResumeBanner();
+
+  if (!chat || !chat.messages.length) {
+    hero.style.display = (tutorCardHtml || resumeHtml) ? "none" : "flex";
+    list.innerHTML = resumeHtml + tutorCardHtml;
+    return;
+  }
   hero.style.display = "none";
-  list.innerHTML = chat.messages.map(m => {
+  list.innerHTML = resumeHtml + tutorCardHtml + chat.messages.map(m => {
     if (m.role === "user") {
       const thumbs = (m.atts || []).filter(a => a.dataUrl).map(a => `<img class="user-thumb-img" src="${a.dataUrl}" onclick="openLightbox('${a.dataUrl}')" />`).join("");
       const docs = (m.atts || []).filter(a => a.type === "file").map(a => `<span class="cite-pill">${esc(a.name)}</span>`).join("");
-      return `<div class="msg-row user">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}</div>`;
+      const saveBar = m.suggestSaveTutorId ? `<div class="tutor-auto-save-bar">
+        <span>Phát hiện kiến thức mới trên lớp — lưu vào Kho Gia sư?</span>
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="btn-p tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="saveMessageToTutorNotes('${m.suggestSaveTutorId}','${m.id}')">Lưu ngay</button>
+          <button type="button" class="mini-act tap" onclick="dismissTutorSuggest('${m.id}')">${ICON_X}</button>
+        </div></div>` : "";
+      return `<div class="msg-row user">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}${saveBar}</div>`;
     }
     if (m.pipeline) {
       const p = m.pipeline;
@@ -1564,6 +1657,7 @@ function renderMessages() {
       const doneActs = (!m.streaming && !p.awaitingApproval && (p.finalCode || p.codeOutput)) ? `<div class="img-act-row">
         ${p.finalCode ? `<button class="btn-p tap" style="height:34px;font-size:12.5px;" onclick="openPipelineCanvas('${m.id}')">Mở code trong Canvas</button>` : ""}
         <button class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="copyPipelineCode('${m.id}')">Sao chép mã cuối</button>
+        <button class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="mergeReplyIntoSharedContext('${m.id}')">Đồng bộ boi-canh.md</button>
       </div>` : "";
 
       return `<div class="msg-row assistant"><div class="pipeline-wrap">
@@ -1587,7 +1681,7 @@ function renderMessages() {
     const thTitle = m.streaming && !m.text ? "Đang tư duy..." : (thSec ? `Đã tư duy (${thSec}s)` : "Quá trình tư duy");
     const showTh = Boolean(m.thinking);
     const thOpen = m.streaming && !m.text && showTh;
-    const thinkBlock = `<div id="thb-${m.id}" class="think-box" style="display:${showTh ? "block" : "none"};">
+    const thinkBlock = `<div id="thb-${m.id}" class="think-box ${m.streaming && !m.text ? "thinking-active" : ""}" style="display:${showTh ? "block" : "none"};">
       <button type="button" class="think-head tap-soft" onclick="toggleAcc('tha-${m.id}','thc-${m.id}')">
         <span class="think-head-l">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>
@@ -1606,7 +1700,7 @@ function renderMessages() {
         <span class="meta-pill">${esc(m.modelLabel || "API AI")}</span>
         ${(S.user?.role === "admin" && m.slot) ? `<span class="meta-pill nowrap-pill">${esc(m.slot)}</span>` : ""}
       </div>
-      ${thinkBlock}${wavy}<div class="md" id="md-${m.id}">${m.text ? renderMd(m.text) : ""}</div>
+      ${thinkBlock}${wavy}<div class="md ${m.streaming ? "streaming-live" : ""}" id="md-${m.id}">${m.text ? renderMd(m.text) : ""}</div>
       ${m.citedFile ? `<span class="cite-pill">${esc(m.citedFile)}</span>` : ""}
       ${m.genImg ? `<img class="gen-img" src="${m.genImg}" onclick="openLightbox('${m.genImg}')" />
         ${m.imagePrompt ? `<div class="img-act-row">
@@ -1627,10 +1721,16 @@ function getMsgText(id) { return S.chats.find(c => c.id === S.activeChatId)?.mes
 function rateMsg(id, d) { haptic("tap"); const m = S.chats.find(x => x.id === S.activeChatId)?.messages.find(x => x.id === id); if (!m) return; m.feedback = m.feedback === d ? null : d; renderMessages(); }
 function shareMsg(id) { const t = getMsgText(id); if (navigator.share) navigator.share({ title: "API AI", text: t }).catch(() => {}); else copyText(t, "Đã sao chép"); }
 function openMsgMore(id) {
+  const tBtn = S.activeTutorId
+    ? `<button type="button" class="s-row tap-soft" onclick="closeModal();saveReplyToTutorMistake('${S.activeTutorId}','${id}')"><span>Lưu vào Sổ Lỗi Sai (Ôn lại 1/3/7 ngày)</span></button>
+       <button type="button" class="s-row tap-soft" onclick="closeModal();saveMessageToTutorNotes('${S.activeTutorId}','${id}')"><span>Lưu vào Kho kiến thức Gia sư</span></button>`
+    : "";
   openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:10px;">Tùy chọn phản hồi</h3>
-    <button class="s-row tap-soft" onclick="closeModal();openCanvasCode(getMsgText('${id}'),'Canvas')"><span>Mở trong Canvas</span></button>
-    <button class="s-row tap-soft" onclick="closeModal();saveLib('doc','Ghi chú API AI',getMsgText('${id}'));showToast('Đã lưu Thư viện')"><span>Lưu vào Thư viện</span></button>
-    <button class="s-row tap-soft" onclick="closeModal();addQuickMemory(getMsgText('${id}').slice(0,220))"><span>Lưu đoạn này vào Trí nhớ</span></button>`);
+    <button type="button" class="s-row tap-soft" onclick="closeModal();mergeReplyIntoSharedContext('${id}')"><span>Đồng bộ vào hồ sơ boi-canh.md (GPT & Claude dùng chung)</span></button>
+    ${tBtn}
+    <button type="button" class="s-row tap-soft" onclick="closeModal();openCanvasCode(getMsgText('${id}'),'Canvas')"><span>Mở trong Canvas</span></button>
+    <button type="button" class="s-row tap-soft" onclick="closeModal();saveLib('doc','Ghi chú API AI',getMsgText('${id}'));showToast('Đã lưu Thư viện')"><span>Lưu vào Thư viện</span></button>
+    <button type="button" class="s-row tap-soft" onclick="closeModal();addQuickMemory(getMsgText('${id}').slice(0,220))"><span>Lưu đoạn này vào Trí nhớ</span></button>`);
 }
 function toggleSpeak(id) {
   if (!window.speechSynthesis) return showToast("Thiết bị không hỗ trợ đọc giọng nói");
@@ -1655,10 +1755,10 @@ async function loadAdminData(silent = false) {
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
     const wv = document.getElementById("admin-worker-ver");
     if (wv) {
-      if (data.backendVersion === "3.2") {
-        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.2</span>`;
+      if (data.backendVersion === "3.3") {
+        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.3</span>`;
       } else {
-        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.2)</span>`;
+        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.3)</span>`;
       }
     }
     if (!silent) renderAdminBody();
@@ -1668,7 +1768,7 @@ function setAdminTab(t) { haptic("tap"); S.adminTab = t; document.querySelectorA
 
 function renderAdminBody() {
   const d = S.adminData, box = document.getElementById("admin-body");
-  if (!d) { box.innerHTML = `<p class="p-sub">Đang tải dữ liệu...</p>`; return; }
+  if (!d) { box.innerHTML = `<div class="card-item lg-card" style="display:flex;flex-direction:column;gap:10px;"><div class="skel-line" style="width:45%;"></div><div class="skel-line" style="width:92%;"></div><div class="skel-line" style="width:74%;"></div></div>`; return; }
 
   // TAB 1: KEYS (TIER x DURATION)
   if (S.adminTab === "keys") {
@@ -1865,9 +1965,10 @@ function renderAdminBody() {
     return;
   }
 
-  // TAB 6: SYSTEM NOTICE & MAINTENANCE (5B ĐỘT PHÁ)
+  // TAB 6: SYSTEM NOTICE, MAINTENANCE, CONTACTS/PRICES (5BC) & SECURITY LOGS (3B)
   if (S.adminTab === "system") {
-    const n = d.config.system_notice || {}, m = d.config.maintenance || {};
+    const n = d.config.system_notice || {}, m = d.config.maintenance || {}, ct = d.config.contacts || {}, pr = ct.plan_prices || {};
+    const logs = d.securityLogs || [];
     box.innerHTML = `
       <div class="card-item lg-card">
         <div class="s-row" style="padding:0 0 8px;" onclick="document.getElementById('sy-n-on').classList.toggle('on')">
@@ -1875,19 +1976,52 @@ function renderAdminBody() {
           <div id="sy-n-on" class="sw ${n.enabled?"on":""}"></div>
         </div>
         <label class="f-lbl">Nội dung thông báo</label>
-        <textarea id="sy-n-txt" class="field" rows="3" placeholder="VD: Đã nâng cấp thêm model Claude Sonnet 5 cho gói Pro Max!">${esc(n.text || "")}</textarea>
+        <textarea id="sy-n-txt" class="field" rows="2" placeholder="VD: Đã nâng cấp API AI v3.3!">${esc(n.text || "")}</textarea>
         <label class="f-lbl">Mức độ</label>
         <select id="sy-n-lvl" class="field"><option value="info" ${n.level!=="warn"?"selected":""}>Thông tin (Xanh)</option><option value="warn" ${n.level==="warn"?"selected":""}>Cảnh báo (Vàng)</option></select>
       </div>
+
       <div class="card-item lg-card">
         <div class="s-row" style="padding:0 0 8px;" onclick="document.getElementById('sy-m-on').classList.toggle('on')">
           <div><strong>Chế độ bảo trì (Chặn user thường)</strong><div style="font-size:12px;color:var(--ink-3);">Admin vẫn đăng nhập và thao tác bình thường</div></div>
           <div id="sy-m-on" class="sw ${m.enabled?"on":""}"></div>
         </div>
         <label class="f-lbl">Thông báo bảo trì</label>
-        <textarea id="sy-m-txt" class="field" rows="3">${esc(m.message || "Hệ thống API AI đang bảo trì nâng cấp.")}</textarea>
+        <textarea id="sy-m-txt" class="field" rows="2">${esc(m.message || "Hệ thống API AI đang bảo trì nâng cấp.")}</textarea>
       </div>
-      <button class="btn-p tap" style="width:100%;" onclick="adminSaveSystem()">Lưu cấu hình hệ thống</button>`;
+
+      <div class="card-item lg-card">
+        <strong style="display:block;font-size:14.5px;margin-bottom:6px;">Liên hệ cấp Key & Bảng giá (Ẩn SĐT trong APK)</strong>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div><label class="f-lbl">Tên Telegram</label><input id="sy-tg-h" class="field" value="${esc(ct.telegram_handle || "@BangTechnology")}" /></div>
+          <div><label class="f-lbl">Link Telegram</label><input id="sy-tg-u" class="field" value="${esc(ct.telegram_url || "https://t.me/BangTechnology")}" /></div>
+        </div>
+        <label class="f-lbl">Link Zalo chuyển hướng (/go/zalo)</label>
+        <input id="sy-zalo-u" class="field" value="${esc(ct.zalo_url || "")}" placeholder="https://zalo.me/..." />
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+          <div><label class="f-lbl">Giá Classic</label><input id="sy-pr-c" class="field" value="${esc(pr.classic || "9K/tuần · 19K/tháng")}" /></div>
+          <div><label class="f-lbl">Giá Pro</label><input id="sy-pr-p" class="field" value="${esc(pr.pro || "39K/tháng · 99K/3 tháng")}" /></div>
+          <div><label class="f-lbl">Giá Pro Max</label><input id="sy-pr-pm" class="field" value="${esc(pr.pro_max || "79K/tháng · 199K/3 tháng")}" /></div>
+          <div><label class="f-lbl">Giá Ultra</label><input id="sy-pr-u" class="field" value="${esc(pr.ultra || "139K/tháng · 890K/năm")}" /></div>
+        </div>
+      </div>
+
+      <button class="btn-p tap" style="width:100%;margin-bottom:14px;" onclick="adminSaveSystem()">Lưu cấu hình hệ thống</button>
+
+      <div class="card-item lg-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong style="font-size:14.5px;">Nhật ký chặn dò API (${logs.length})</strong>
+          ${logs.length ? `<button type="button" class="btn-danger tap" style="height:30px;font-size:12px;" onclick="adminClearSecurityLogs()">Xóa nhật ký</button>` : ""}
+        </div>
+        ${logs.length ? logs.map(l => `<div style="padding:8px 0;border-bottom:1px solid var(--rim);font-size:12.5px;">
+          <div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+            <strong>${esc(l.email)}</strong>
+            <span class="tag-st st-revoked">${esc(l.probe_type)}</span>
+          </div>
+          <div style="color:var(--ink-2);margin-top:3px;">${esc(l.snippet)}</div>
+          <div style="color:var(--ink-3);font-size:11px;margin-top:2px;">${new Date(l.created_at).toLocaleString("vi-VN")}</div>
+        </div>`).join("") : `<div style="font-size:12.5px;color:var(--ink-3);">Chưa ghi nhận hành vi dò API/Prompt nào.</div>`}
+      </div>`;
   }
 }
 
@@ -2236,8 +2370,23 @@ function openManualMailHandoff(email, newPassword) {
 async function adminSaveSystem() {
   const system_notice = { enabled: document.getElementById("sy-n-on").classList.contains("on"), text: document.getElementById("sy-n-txt").value.trim(), level: document.getElementById("sy-n-lvl").value };
   const maintenance = { enabled: document.getElementById("sy-m-on").classList.contains("on"), message: document.getElementById("sy-m-txt").value.trim() };
-  const r = await apiFetch("/admin/config/save", { method: "POST", body: { system_notice, maintenance } });
-  if (r.ok) { applySystemMeta({ notice: system_notice, maintenance }); haptic("ok"); showToast("Đã lưu cài đặt hệ thống"); loadAdminData(); }
+  const contacts = {
+    telegram_handle: document.getElementById("sy-tg-h").value.trim() || "@BangTechnology",
+    telegram_url: document.getElementById("sy-tg-u").value.trim() || "https://t.me/BangTechnology",
+    zalo_url: document.getElementById("sy-zalo-u").value.trim(),
+    plan_prices: {
+      classic: document.getElementById("sy-pr-c").value.trim(),
+      pro: document.getElementById("sy-pr-p").value.trim(),
+      pro_max: document.getElementById("sy-pr-pm").value.trim(),
+      ultra: document.getElementById("sy-pr-u").value.trim()
+    }
+  };
+  const r = await apiFetch("/admin/config/save", { method: "POST", body: { system_notice, maintenance, contacts } });
+  if (r.ok) { applySystemMeta({ notice: system_notice, maintenance }); haptic("ok"); showToast("Đã lưu cài đặt hệ thống", "ok"); loadAdminData(); }
+}
+async function adminClearSecurityLogs() {
+  const r = await apiFetch("/admin/security-logs/clear", { method: "POST" });
+  if (r.ok) { haptic("ok"); showToast("Đã xóa nhật ký bảo mật"); loadAdminData(); }
 }
 
 /* ===== UPDATER, VOICE, SIDEBAR, SKILLS, LIBRARY, MEMORY, GESTURES ===== */
@@ -2255,37 +2404,21 @@ async function checkAppUpdate(silent = false) {
 }
 
 function setWorkMode(mode, anim = true) {
-  if (mode === "four_agent" && S.user && !canUseFourAgent()) {
-    haptic("err");
-    showToast("Chế độ 4-Agent yêu cầu Key hạng Pro Max trở lên");
-    mode = "chat";
-  }
+  if (mode !== "chat" && mode !== "task") mode = "chat";
   S.cfg.workMode = mode; dbPut("kv", S.cfg);
   const tr = document.getElementById("mode-seg"), th = document.getElementById("mode-thumb");
   tr.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
   const act = tr.querySelector(`.seg-btn[data-mode="${mode}"]`);
   if (act && th) moveSegThumb(th, act);
-
-  const cfgBtn = document.getElementById("btn-agent-cfg");
-  const cfgAcc = document.getElementById("agent-cfg-acc");
-  if (cfgBtn) cfgBtn.style.display = mode === "four_agent" ? "inline-flex" : "none";
-  if (mode === "four_agent") {
-    renderAgentConfigPanel();
-    if (anim && cfgAcc && !cfgAcc.classList.contains("open")) {
-      cfgAcc.classList.add("open");
-      document.getElementById("chev-ag")?.classList.add("rot");
-    }
-  } else if (cfgAcc) {
-    cfgAcc.classList.remove("open");
-    document.getElementById("chev-ag")?.classList.remove("rot");
-  }
-
+  renderActiveContextBanner();
   const h = document.getElementById("hero-title");
-  const txt = mode === "four_agent" ? "Mô tả ứng dụng hoặc tính năng cần 4-Agent xây dựng"
-    : (mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : "Chúng ta nên bắt đầu từ đâu nhỉ?");
+  const activeTeam = S.activeTeamId ? S.teams.find(t => t.id === S.activeTeamId) : null;
+  const activeTutor = S.activeTutorId ? S.tutors.find(t => t.id === S.activeTutorId) : null;
+  const txt = activeTeam ? `Đội ngũ ${activeTeam.name} đã sẵn sàng`
+    : (activeTutor ? `Gia sư ${activeTutor.name} (${activeTutor.subject})` : (mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : "Chúng ta nên bắt đầu từ đâu nhỉ?"));
   if (anim) { h.style.opacity = "0"; setTimeout(() => { h.textContent = txt; h.style.opacity = "1"; }, 120); } else h.textContent = txt;
-  document.getElementById("prompt-in").placeholder = mode === "four_agent" ? "Mô tả bài toán cho 4-Agent..."
-    : (mode === "task" ? "Mô tả tác vụ" : "Hỏi API AI");
+  document.getElementById("prompt-in").placeholder = activeTeam ? `Giao việc cho ${activeTeam.name}...`
+    : (activeTutor ? `Hỏi Gia sư ${activeTutor.subject}...` : (mode === "task" ? "Mô tả tác vụ" : "Hỏi API AI"));
 }
 
 function handleOrbAction() { const has = document.getElementById("prompt-in").value.trim().length > 0 || S.atts.length > 0; if (S.streaming || has) return sendPrompt(); openLiveVoice(); }
@@ -2343,7 +2476,17 @@ function toggleSidebar(o, initVel = 0) {
 function closePopovers() { document.querySelectorAll(".popover").forEach(p => p.classList.remove("open")); document.getElementById("btn-model-trigger").classList.remove("open"); }
 function toggleModelDropdown(e) { e.stopPropagation(); haptic("tap"); const d = document.getElementById("model-dropdown"), b = document.getElementById("btn-model-trigger"), o = !d.classList.contains("open"); closePopovers(); d.classList.toggle("open", o); b.classList.toggle("open", o); }
 function toggleChatMore(e) { e.stopPropagation(); haptic("tap"); const p = document.getElementById("chat-more-popover"), o = !p.classList.contains("open"); closePopovers(); p.classList.toggle("open", o); }
-function switchView(v) { haptic("tap"); document.querySelectorAll(".view").forEach(x => x.classList.remove("active")); document.getElementById("view-" + v)?.classList.add("active"); toggleSidebar(false); if (v === "customize") renderSkillsPage(); if (v === "library") renderLibrary(); if (v === "import") renderMemoriesPage(); }
+function switchView(v) {
+  haptic("tap");
+  document.querySelectorAll(".view").forEach(x => x.classList.remove("active"));
+  document.getElementById("view-" + v)?.classList.add("active");
+  toggleSidebar(false);
+  if (v === "customize") renderSkillsPage();
+  if (v === "library") renderLibrary();
+  if (v === "import") renderMemoriesPage();
+  if (v === "teams") renderTeamsPage();
+  if (v === "tutors") renderTutorsPage();
+}
 
 function renderSidebar() { renderNbList(); renderChatsList(); }
 function cycleFilter() { const a = ["all", "pinned", "task"], l = { all: "Lịch sử chat", pinned: "Đã ghim", task: "Nhiệm vụ" }; S.filter = a[(a.indexOf(S.filter) + 1) % a.length]; document.getElementById("filter-lbl").textContent = l[S.filter]; renderChatsList(); }
@@ -2354,15 +2497,15 @@ function renderChatsList() {
   if (S.filter === "task") items = items.filter(c => c.mode === "task");
   if (q) items = items.filter(c => (c.title || "").toLowerCase().includes(q));
   items.sort((a, b) => (Number(b.pinned) - Number(a.pinned)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
-  document.getElementById("sb-chats-list").innerHTML = items.map(c => `
-    <div class="chat-item ${c.id===S.activeChatId?"active":""}" onclick="openChat('${c.id}')">
+  document.getElementById("sb-chats-list").innerHTML = items.map((c, idx) => `
+    <div class="chat-item stagger-item ${c.id===S.activeChatId?"active":""}" style="--stagger-i:${idx}" onclick="openChat('${c.id}')">
       <span class="chat-item-title">${esc(c.title)}</span>
       <button class="mini-act tap ${c.pinned?"pinned":""}" onclick="event.stopPropagation();pinChat('${c.id}')" aria-label="Ghim">${ICON_PIN}</button>
       <button class="mini-act tap" onclick="event.stopPropagation();delChat('${c.id}')" aria-label="Xóa">${ICON_X}</button>
     </div>`).join("") || `<div style="padding:8px 12px;font-size:12.5px;color:var(--ink-3);">Chưa có đoạn chat</div>`;
 }
-function startNewChat() { S.activeChatId = null; S.activeNbId = null; S.lastCrossRecalls = []; switchView("chat"); renderMessages(); renderChatsList(); renderMemoryBar(); renderChips(); }
-function openChat(id) { S.activeChatId = id; S.activeNbId = S.chats.find(x => x.id === id)?.nbId || null; switchView("chat"); renderMessages(); renderChatsList(); renderMemoryBar(); renderChips(); }
+function startNewChat() { S.activeChatId = null; S.activeNbId = null; S.activeTeamId = null; S.activeTutorId = null; S.lastCrossRecalls = []; switchView("chat"); setWorkMode(S.cfg.workMode, false); renderMessages(); renderChatsList(); renderMemoryBar(); renderChips(); renderTopContextPill(); }
+function openChat(id) { const ch = S.chats.find(x => x.id === id); S.activeChatId = id; S.activeNbId = ch?.nbId || null; S.activeTeamId = ch?.teamId || null; S.activeTutorId = ch?.tutorId || null; if (ch?.contextId) S.activeContextId = ch.contextId; switchView("chat"); setWorkMode(S.cfg.workMode, false); renderMessages(); renderChatsList(); renderMemoryBar(); renderChips(); renderTopContextPill(); }
 async function pinChat(id) { const c = S.chats.find(x => x.id === id); if (!c) return; c.pinned = !c.pinned; apiFetch("/sync/chats", { method: "POST", body: c }).catch(() => {}); renderChatsList(); }
 async function delChat(id) { S.chats = S.chats.filter(x => x.id !== id); apiFetch("/sync/chats/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {}); if (S.activeChatId === id) S.activeChatId = null; renderChatsList(); renderMessages(); }
 function pinActiveChat() { if (S.activeChatId) { pinChat(S.activeChatId); showToast("Đã cập nhật ghim"); } }
@@ -2470,6 +2613,7 @@ function openAppearanceModal() {
   openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Giao diện và hiệu năng</h3>
     <div class="s-row" onclick="S.cfg.ultraGlass=!S.cfg.ultraGlass;dbPut('kv',S.cfg);applyTheme();this.querySelector('.sw').classList.toggle('on',S.cfg.ultraGlass);haptic('switch')"><span>Kính Ultra (tắt để mượt máy yếu)</span><div class="sw ${S.cfg.ultraGlass?"on":""}"></div></div>
     <div class="s-row" onclick="S.cfg.haptics=!S.cfg.haptics;dbPut('kv',S.cfg);this.querySelector('.sw').classList.toggle('on',S.cfg.haptics);haptic('ok')"><span>Rung phản hồi xúc giác</span><div class="sw ${S.cfg.haptics?"on":""}"></div></div>
+    <div class="s-row" onclick="S.cfg.lowPowerMotion=!S.cfg.lowPowerMotion;dbPut('kv',S.cfg);applyTheme();this.querySelector('.sw').classList.toggle('on',S.cfg.lowPowerMotion);haptic('switch')"><span>Giảm hiệu ứng cho máy yếu (tiết kiệm pin)</span><div class="sw ${S.cfg.lowPowerMotion?"on":""}"></div></div>
     <div class="v-sliders">
       <div class="v-col"><div class="v-track" id="vt-b"><div class="v-fill" id="vf-b" style="height:${bp}%"></div></div><span style="font-size:12px;color:var(--ink-2);" class="num">Độ mờ <b id="lb-b">${S.cfg.blurPx}px</b></span></div>
       <div class="v-col"><div class="v-track" id="vt-a"><div class="v-fill" id="vf-a" style="height:${ap}%"></div></div><span style="font-size:12px;color:var(--ink-2);" class="num">Độ đục <b id="lb-a">${Math.round(S.cfg.glassAlpha*100)}%</b></span></div>
@@ -2658,5 +2802,1133 @@ function showToast(msg, kind = null) {
   clearTimeout(tTimer); tTimer = setTimeout(() => t.classList.remove("show"), 2800);
 }
 function copyText(txt, ok = "Đã sao chép") { navigator.clipboard?.writeText(txt).then(() => showToast(ok)).catch(() => showToast("Không thể sao chép")); }
+
+
+/* =========================================================================
+   v3.3 MODULE 1: NATIVE ANDROID FOREGROUND SERVICE, ALERTS & AUTO-RESUME (1B + ĐỘT PHÁ)
+   ========================================================================= */
+function getNativeBg() {
+  return window.Capacitor?.Plugins?.ApiAiBackground || null;
+}
+function bgRequestNotifyPerm() {
+  try { getNativeBg()?.requestNotifyPermission?.(); } catch {}
+  try { if (window.Notification && Notification.permission === "default") Notification.requestPermission().catch(() => {}); } catch {}
+}
+function bgStartTask(title, body) {
+  try { getNativeBg()?.startTask?.({ title, body }); } catch {}
+}
+function bgStopTask() {
+  try { getNativeBg()?.stopTask?.(); } catch {}
+}
+function bgNotifyDone(title, body) {
+  try {
+    const nat = getNativeBg();
+    if (nat?.notifyDone) { nat.notifyDone({ title, body }); return; }
+    if (window.Notification && Notification.permission === "granted") new Notification(title, { body });
+  } catch {}
+}
+async function savePendingTask(task) {
+  S.pendingTask = task ? { id: "pendingTask", ...task, updatedAt: Date.now() } : null;
+  if (S.pendingTask) await dbPut("kv", S.pendingTask).catch(() => {});
+  else await dbDel("kv", "pendingTask").catch(() => {});
+}
+function buildPendingResumeBanner() {
+  const pt = S.pendingTask;
+  if (!pt || pt.chatId !== S.activeChatId || S.streaming) return "";
+  return `<div class="switch-api-card" style="margin-bottom:12px;">
+    <div><strong>Phát hiện phiên Team đang chạy dở</strong> (${esc(pt.teamName || "Team")} · còn lại từ bước ${Number(pt.nextIdx || 0) + 1})</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn-p tap" style="height:34px;font-size:12.5px;" onclick="resumePendingTeamTask()">Khôi phục & Chạy tiếp</button>
+      <button type="button" class="btn-s tap" style="height:34px;font-size:12.5px;" onclick="savePendingTask(null);renderMessages()">Bỏ qua</button>
+    </div></div>`;
+}
+async function resumePendingTeamTask() {
+  const pt = S.pendingTask; if (!pt) return;
+  const chat = S.chats.find(c => c.id === pt.chatId);
+  const team = S.teams.find(t => t.id === pt.teamId);
+  const msg = chat?.messages.find(m => m.id === pt.msgId);
+  if (!chat || !team || !msg) { await savePendingTask(null); renderMessages(); return; }
+  await runTeamPipeline(chat, team, pt.prompt, msg, Number(pt.nextIdx || 0));
+}
+
+/* =========================================================================
+   v3.3 MODULE 2: KEY GATE CONTACTS & LIVE 4-TIER PLAN COMPARISON (5BC + ĐỘT PHÁ)
+   ========================================================================= */
+let cachedPublicPlans = null;
+async function loadPublicPlansMeta() {
+  try {
+    const r = await apiFetch("/public/plans", { auth: false });
+    if (r.ok) {
+      cachedPublicPlans = await r.json();
+      const lbl = document.getElementById("kg-tg-label");
+      if (lbl && cachedPublicPlans.telegramHandle) lbl.textContent = cachedPublicPlans.telegramHandle;
+    }
+  } catch {}
+}
+function openSupportContact(channel) {
+  haptic("tap");
+  const base = getApiBase();
+  if (!base) return showToast("Chưa kết nối máy chủ", "err");
+  const target = channel === "zalo" ? `${base}/go/zalo` : `${base}/go/telegram`;
+  window.open(target, "_blank", "noopener");
+}
+async function openPlanComparisonModal() {
+  haptic("tap");
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:8px;">Bảng giá & Quyền lợi 4 Hạng Key</h3>
+    <div id="plan-cmp-body" style="display:flex;flex-direction:column;gap:8px;">
+      <div class="skel-line" style="width:60%;"></div><div class="skel-line" style="width:95%;height:60px;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button type="button" class="btn-contact tap" style="flex:1;" onclick="openSupportContact('telegram')">Telegram</button>
+      <button type="button" class="btn-contact tap" style="flex:1;" onclick="openSupportContact('zalo')">Nhắn Zalo</button>
+      <button type="button" class="btn-p tap" onclick="closeModal()">Đóng</button>
+    </div>`);
+  if (!cachedPublicPlans) await loadPublicPlansMeta();
+  const el = document.getElementById("plan-cmp-body");
+  if (!el) return;
+  const tiers = cachedPublicPlans?.tiers || [];
+  if (!tiers.length) { el.innerHTML = `<div style="font-size:13px;color:var(--ink-2);">Không tải được bảng giá. Nhắn Telegram/Zalo để nhận báo giá mới nhất.</div>`; return; }
+  el.innerHTML = tiers.map(t => `
+    <div class="card-item lg-card" style="margin:0;padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="tag-st tier-${esc(t.id)}" style="font-size:12px;">${esc(t.label)}</span>
+        <strong class="num" style="font-size:13px;color:var(--ok-ink);">${esc(t.price)}</strong>
+      </div>
+      <div style="font-size:12px;color:var(--ink-2);margin-top:6px;line-height:1.55;">
+        Tin nhắn: <b>${t.daily_msgs < 0 ? "Vô hạn" : t.daily_msgs + "/ngày"}</b> · Token: <b class="num">${Number(t.daily_tokens || 0).toLocaleString("vi-VN")}/ngày</b> · Max <b>${t.max_devices}</b> máy<br/>
+        Models: <span style="color:var(--ink);">${esc((t.models || []).join(", ") || "Cơ bản")}</span><br/>
+        ${t.allow_teams ? "✓ Đội ngũ AI (Teams) & Gia sư AI · " : ""}${t.allow_github_skills ? "✓ GitHub Repo · " : ""}${t.allow_image_gen ? "✓ Tạo ảnh" : "Chat & Canvas"}
+      </div>
+    </div>`).join("");
+}
+
+/* =========================================================================
+   v3.3 MODULE 3: SINGLE SOURCE OF TRUTH — boi-canh.md (FROM video_1.mp4!)
+   ========================================================================= */
+function getActiveContextForChat(chat) {
+  const cid = chat?.contextId || S.activeContextId;
+  if (!cid) return null;
+  return S.contexts.find(c => c.id === cid) || null;
+}
+function renderTopContextPill() {
+  const el = document.getElementById("top-ctx-pill");
+  if (!el) return;
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const ctx = getActiveContextForChat(chat);
+  if (ctx) {
+    el.classList.add("attached");
+    el.textContent = ctx.title || "boi-canh.md";
+  } else {
+    el.classList.remove("attached");
+    el.textContent = "boi-canh.md";
+  }
+}
+function openSharedContextManager() {
+  haptic("tap");
+  toggleSidebar(false);
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const curId = chat?.contextId || S.activeContextId;
+  const listHtml = S.contexts.map((c, idx) => `
+    <div class="card-item lg-card stagger-item" style="--stagger-i:${idx};margin-bottom:8px;padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+        <strong style="font-family:var(--font-mono);font-size:13px;">${esc(c.title)}</strong>
+        <span class="tag-st ${c.id===curId?"st-active":"st-unused"}">${c.id===curId?"Đang gắn":"Sẵn sàng"}</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink-2);margin-top:4px;white-space:pre-line;">${esc((c.content || "").slice(0, 140))}${(c.content||"").length>140?"...":""}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        <button type="button" class="btn-p tap" style="height:32px;font-size:12px;" onclick="attachSharedContext('${c.id}')">${c.id===curId?"Gỡ khỏi chat":"Gắn vào chat này"}</button>
+        <button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="openSharedContextEditor('${c.id}')">Xem / Sửa</button>
+        <button type="button" class="btn-danger tap" style="height:32px;font-size:12px;" onclick="deleteSharedContext('${c.id}')">Xóa</button>
+      </div>
+    </div>`).join("") || `<p class="p-sub" style="margin:6px 0;">Chưa có hồ sơ ngữ cảnh chung nào. Tạo 1 file <b>boi-canh.md</b> duy nhất để cả Claude và GPT cùng đọc — không cần làm "bồ câu đưa thư" copy qua lại nữa!</p>`;
+
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:4px;">Hồ sơ Ngữ cảnh Chung (boi-canh.md)</h3>
+    <p style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px;">1 file duy nhất dùng chung cho mọi Model (GPT, Claude, Teams). Sửa 1 chỗ — tất cả AI tự đồng bộ ngay.</p>
+    <div style="max-height:52dvh;overflow-y:auto;">${listHtml}</div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:12px;">
+      <button type="button" class="btn-blue tap" onclick="openSharedContextEditor(null)">+ Tạo boi-canh.md</button>
+      <button type="button" class="btn-s tap" onclick="closeModal()">Đóng</button>
+    </div>`);
+}
+function openSharedContextEditor(id) {
+  const c = id ? S.contexts.find(x => x.id === id) : null;
+  const tpl = c?.content || "# Bối cảnh dự án\n- Mục tiêu:\n- Quyết định đã chốt:\n- Cấu trúc file / dữ liệu:\n- Việc cần làm tiếp:";
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:6px;">${c ? "Sửa hồ sơ ngữ cảnh" : "Tạo boi-canh.md mới"}</h3>
+    <label class="f-lbl">Tên file ngữ cảnh</label>
+    <input id="ctx-title" class="field" style="font-family:var(--font-mono);" value="${esc(c?.title || "boi-canh.md")}" />
+    <label class="f-lbl">Nội dung dùng chung (Markdown)</label>
+    <textarea id="ctx-body" class="field" rows="9" style="font-size:13.5px;line-height:1.5;">${esc(tpl)}</textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button type="button" class="btn-s tap" onclick="openSharedContextManager()">Quay lại</button>
+      <button type="button" class="btn-p tap" onclick="saveSharedContext('${c?.id || ""}')">Lưu & Gắn</button>
+    </div>`);
+}
+async function saveSharedContext(id) {
+  const title = document.getElementById("ctx-title").value.trim() || "boi-canh.md";
+  const content = document.getElementById("ctx-body").value.trim();
+  const obj = { id: id || ("ctx-" + Date.now()), title, content, updatedAt: Date.now() };
+  await dbPut("contexts", obj);
+  apiFetch("/sync/contexts", { method: "POST", body: obj }).catch(() => {});
+  S.contexts = (await dbAll("contexts")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  S.activeContextId = obj.id;
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  if (chat) { chat.contextId = obj.id; apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
+  closeModal(); renderTopContextPill(); haptic("ok"); showToast(`Đã lưu & gắn ${title}`);
+}
+function attachSharedContext(id) {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const next = (chat?.contextId || S.activeContextId) === id ? null : id;
+  S.activeContextId = next;
+  if (chat) { chat.contextId = next; apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
+  closeModal(); renderTopContextPill(); haptic("switch");
+  showToast(next ? "Đã gắn boi-canh.md cho mọi model trong chat này" : "Đã gỡ boi-canh.md");
+}
+async function deleteSharedContext(id) {
+  await dbDel("contexts", id);
+  apiFetch("/sync/contexts/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {});
+  S.contexts = S.contexts.filter(c => c.id !== id);
+  if (S.activeContextId === id) S.activeContextId = null;
+  renderTopContextPill(); openSharedContextManager();
+}
+async function mergeReplyIntoSharedContext(msgId) {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const msg = chat?.messages.find(m => m.id === msgId);
+  const replyTxt = msg?.pipeline?.codeOutput || msg?.text || "";
+  if (!replyTxt) return showToast("Không có nội dung để đồng bộ");
+
+  let ctx = getActiveContextForChat(chat);
+  if (!ctx) {
+    ctx = { id: "ctx-" + Date.now(), title: "boi-canh.md", content: `# Bối cảnh ${chat?.title || "dự án"}\n`, updatedAt: Date.now() };
+  }
+  showToast(`Đang hợp nhất vào ${ctx.title} bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"}...`);
+  try {
+    const r = await apiFetch("/ai/digest", {
+      method: "POST",
+      body: {
+        digestMode: "merge_context",
+        readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol",
+        instruction: "Hợp nhất bối cảnh cũ và kết quả/quyết định mới dưới đây thành đúng 1 bản boi-canh.md gọn sạch duy nhất.",
+        content: `=== BOI-CANH.MD HIỆN TẠI ===\n${ctx.content}\n\n=== CẬP NHẬT MỚI TỪ AI ===\n${replyTxt.slice(0, 10000)}`
+      }
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Đồng bộ thất bại");
+    ctx.content = d.digest || ctx.content;
+    ctx.updatedAt = Date.now();
+    await dbPut("contexts", ctx);
+    apiFetch("/sync/contexts", { method: "POST", body: ctx }).catch(() => {});
+    S.contexts = (await dbAll("contexts")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    S.activeContextId = ctx.id;
+    if (chat) { chat.contextId = ctx.id; apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
+    renderTopContextPill(); haptic("ok");
+    showToast(`Đã cập nhật ${ctx.title} (${d.readerModel}) — GPT & Claude đọc chung ngay!`, "ok");
+  } catch (e) { haptic("err"); showToast(e.message, "err"); }
+}
+
+/* =========================================================================
+   v3.3 MODULE 4: SMART CHEAP REPO READER & TOKEN ESTIMATOR (4A + ĐỘT PHÁ, DEFAULT GPT 6.2 SOL)
+   ========================================================================= */
+function renderRepoCostStrip() {
+  const strip = document.getElementById("repo-cost-strip");
+  if (!strip) return;
+  const activeRepos = S.skillIds.map(id => S.skills.find(x => x.id === id)).filter(sk => sk?.repoFiles?.length);
+  if (!activeRepos.length) { strip.style.display = "none"; strip.innerHTML = ""; return; }
+
+  const rawChars = activeRepos.reduce((a, sk) => a + (sk.repoFiles || []).reduce((x, f) => x + (f.size || f.content?.length || 0), 0), 0);
+  const rawTok = Math.max(1000, Math.round(rawChars / 3.5));
+  const compactTok = activeRepos.length * 1400;
+  const readerId = S.cfg.repoReaderModel || "gpt-6.2-sol";
+
+  strip.style.display = "flex";
+  strip.innerHTML = `<div class="repo-budget-pill">
+    <span>Lọc Repo (${activeRepos.length}): <b class="num">~${Math.round(compactTok/1000*10)/10}K</b> tok <span style="opacity:.7;text-decoration:line-through;">${Math.round(rawTok/1000)}K</span></span>
+    <select class="repo-budget-sel" onchange="S.cfg.repoReaderModel=this.value;dbPut('kv',S.cfg);showToast('Model đọc Repo: '+this.options[this.selectedIndex].text)">
+      <option value="gpt-6.2-sol" ${readerId==="gpt-6.2-sol"?"selected":""}>Đọc: GPT 6.2 Sol (×1.2)</option>
+      <option value="gpt-6-luna" ${readerId==="gpt-6-luna"?"selected":""}>Đọc: GPT 6 Luna (×0.7)</option>
+    </select>
+  </div>`;
+}
+
+async function buildRepoIndexViaCheapReader(sk) {
+  try {
+    const fileList = (sk.repoFiles || []).map(f => `- ${f.path} (${Math.max(1, Math.round((f.size||0)/1024))}KB)`).join("\n");
+    const sample = `REPO: ${sk.repo?.owner}/${sk.repo?.repo}\nDANH SÁCH FILE:\n${fileList}\n\nNỘI DUNG CHÍNH:\n${(sk.prompt || "").slice(0, 6000)}`;
+    const r = await apiFetch("/ai/digest", {
+      method: "POST",
+      body: {
+        readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol",
+        instruction: "Lập Bản đồ Kiến trúc Repo (Repo Index) siêu gọn dưới 300 từ: mục đích repo, cấu trúc thư mục quan trọng và vai trò các file chính.",
+        content: sample
+      }
+    });
+    if (r.ok) { const d = await r.json(); return d.digest || ""; }
+  } catch {}
+  return "";
+}
+
+function retrieveCompactRepoContext(sk, queryText) {
+  const files = sk.repoFiles || [];
+  let out = `BẢN ĐỒ REPO (@${sk.name}):\n${(sk.repoIndex || (sk.prompt || "").slice(0, 1800))}`;
+  const words = [...new Set((queryText || "").toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, " ").split(/\s+/).filter(w => w.length >= 3))];
+  const topFiles = files
+    .map(f => {
+      const hay = (f.path + " " + (f.content || "").slice(0, 2500)).toLowerCase();
+      let sc = 0;
+      for (const w of words) { if (f.path.toLowerCase().includes(w)) sc += 3; else if (hay.includes(w)) sc += 1; }
+      return { f, sc };
+    })
+    .filter(x => x.sc > 0)
+    .sort((a, b) => b.sc - a.sc)
+    .slice(0, 2);
+  if (topFiles.length) {
+    out += "\n\nTRÍCH ĐOẠN LIÊN QUAN:\n" + topFiles.map(x => `--- ${x.f.path} ---\n${(x.f.content || "").slice(0, 1600)}`).join("\n\n");
+  }
+  return out.slice(0, 5200);
+}
+
+async function digestActiveReposForQuery(repoSkills, queryText, mainModel) {
+  const mult = Number(mainModel?.cost_multiplier || 1.2);
+  const rawCombined = repoSkills.map(sk => retrieveCompactRepoContext(sk, queryText)).join("\n\n");
+  // If using an expensive model (>= x2.0 like Astra/Opus/Fable) and payload > 1800 chars, pre-digest via GPT 6.2 Sol / Luna!
+  if (mult >= 2.0 && rawCombined.length > 1800) {
+    try {
+      const r = await apiFetch("/ai/digest", {
+        method: "POST",
+        body: {
+          readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol",
+          instruction: `Người dùng hỏi: "${(queryText || "").slice(0, 300)}". Hãy rút gọn đúng kiến thức, tên hàm, quy tắc cần thiết từ Repo để mô hình chính trả lời chính xác mà tốn ít token nhất.`,
+          content: rawCombined
+        }
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.digest) return `NGỮ CẢNH REPO ĐÃ LỌC BỞI ${d.readerModel} (TIẾT KIỆM TOKEN):\n${d.digest}`;
+      }
+    } catch {}
+  }
+  return rawCombined;
+}
+
+/* =========================================================================
+   v3.3 MODULE 5: ĐỘI NGŨ AI (TEAMS — 6A + ĐỘT PHÁ + PER-MEMBER FILES)
+   ========================================================================= */
+function canUseTeams() { return S.user?.role === "admin" || ["pro_max", "ultra"].includes(S.user?.keyTier); }
+function canUseTutors() { return S.user?.role === "admin" || ["pro_max", "ultra"].includes(S.user?.keyTier); }
+
+async function ensureBuiltinCodingTeam() {
+  if (!S.teams.some(t => t.id === "team-coding-4agent")) {
+    const defTeam = {
+      id: "team-coding-4agent",
+      name: "Team Lập trình 4-Agent",
+      desc: "Dây chuyền chuẩn Architect → Coder → Reviewer → Tester (tự vá lỗi)",
+      builtin: true,
+      coordMode: "sequential",
+      pauseAfterFirst: false,
+      maxFixLoops: 1,
+      members: [
+        { id: "architect", role: "Architect · Kiến trúc sư", prompt: "Phân tích yêu cầu, thiết kế kiến trúc hệ thống, cấu trúc dữ liệu, luồng xử lý và edge-cases. KHÔNG viết code dài dòng.", modelId: "gpt-6.2-astra", enabled: true, files: [] },
+        { id: "coder", role: "Coder · Lập trình viên", prompt: "Viết mã nguồn sạch, hoàn chỉnh, chạy được ngay bám sát 100% bản thiết kế. Nếu là web/UI, xuất trọn bộ trong 1 khối ```html ... ```.", modelId: "gpt-6.2-sol", enabled: true, files: [] },
+        { id: "reviewer", role: "Reviewer · Thẩm định viên", prompt: "Soi kỹ từng dòng code tìm lỗi logic, lỗ hổng bảo mật, hiệu năng và sai lệch so với bản vẽ.", modelId: "gpt-6.2-astra", enabled: true, files: [] },
+        { id: "tester", role: "Tester · Kỹ sư kiểm thử", prompt: "Thiết kế ca kiểm thử thực tế, edge-case và mô phỏng chạy kiểm tra. DÒNG ĐẦU TIÊN ghi `STATUS: PASS` hoặc `STATUS: FAIL` kèm danh sách lỗi cần sửa.", modelId: "gpt-6-luna", enabled: true, files: [] }
+      ]
+    };
+    await dbPut("teams", defTeam);
+    S.teams.unshift(defTeam);
+  }
+}
+
+function renderActiveContextBanner() {
+  const el = document.getElementById("active-context-banner");
+  if (!el) return;
+  const team = S.activeTeamId ? S.teams.find(t => t.id === S.activeTeamId) : null;
+  const tutor = S.activeTutorId ? S.tutors.find(t => t.id === S.activeTutorId) : null;
+
+  if (team) {
+    const cnt = (team.members || []).filter(m => m.enabled !== false).length;
+    el.style.display = "flex";
+    el.innerHTML = `<div class="ctx-active-banner">
+      <div style="min-width:0;flex:1;">
+        <strong>Đội ngũ: ${esc(team.name)}</strong> · ${cnt} thành viên · ${team.coordMode==="council"?"Hội đồng":"Dây chuyền"}
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button type="button" class="btn-s tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="openTeamEditor('${team.id}')">Sửa Team</button>
+        <button type="button" class="mini-act tap" onclick="S.activeTeamId=null;setWorkMode('chat',false)" aria-label="Thoát Team">${ICON_X}</button>
+      </div></div>`;
+    return;
+  }
+  if (tutor) {
+    const due = getDueMistakes(tutor).length;
+    el.style.display = "flex";
+    el.innerHTML = `<div class="ctx-active-banner">
+      <div style="min-width:0;flex:1;">
+        <strong>Gia sư ${esc(tutor.name)}</strong> (${esc(tutor.subject)}) ${tutor.streak ? `· <span class="num">${tutor.streak} ngày</span>` : ""} ${due ? `· <b style="color:var(--warn-ink);">Ôn ${due} lỗi</b>` : ""}
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button type="button" class="btn-s tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="openTutorKnowledgeModal('${tutor.id}')">Kho & Lỗi</button>
+        <button type="button" class="mini-act tap" onclick="S.activeTutorId=null;setWorkMode('chat',false);renderMessages()" aria-label="Thoát Gia sư">${ICON_X}</button>
+      </div></div>`;
+    return;
+  }
+  el.style.display = "none";
+  el.innerHTML = "";
+}
+
+function renderTeamsPage() {
+  const box = document.getElementById("teams-body");
+  if (!canUseTeams()) {
+    box.innerHTML = `<div class="card-item lg-card"><strong>Tính năng Đội ngũ AI (Teams) yêu cầu Key hạng Pro Max hoặc Ultra</strong><p class="p-sub" style="margin:6px 0 0;">Nâng cấp gói Key để mở khóa Team Lập trình 4-Agent và tự lập đội ngũ 2–6 thành viên tùy biến.</p></div>`;
+    return;
+  }
+  box.innerHTML = S.teams.map((tm, idx) => {
+    const activeCnt = (tm.members || []).filter(m => m.enabled !== false).length;
+    const filesCnt = (tm.members || []).reduce((a, m) => a + (m.files?.length || 0), 0);
+    return `<div class="card-item lg-card stagger-item" style="--stagger-i:${idx}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <strong style="font-size:15px;">${esc(tm.name)}</strong>
+          ${tm.builtin ? `<span class="tag-st st-unused">Mặc định</span>` : `<span class="tag-st tier-pro_max">Tùy chỉnh</span>`}
+          <span class="tag-quiet">${tm.coordMode === "council" ? "Hội đồng thảo luận" : "Dây chuyền nối tiếp"}</span>
+        </div>
+        <span class="num" style="font-size:12px;color:var(--ink-2);">${activeCnt} thành viên${filesCnt ? ` · ${filesCnt} tệp` : ""}</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-2);margin-top:5px;">${esc(tm.desc || "")}</div>
+      <div class="file-tag-list" style="margin-top:8px;">
+        ${(tm.members || []).filter(m => m.enabled !== false).map(m => `<span class="file-mini-tag">${esc(m.role)} · ${esc(S.models.find(x => x.id === m.modelId)?.short || m.modelId)}</span>`).join("")}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">
+        <button type="button" class="btn-p tap" style="height:36px;font-size:13px;" onclick="openTeamWorkspace('${tm.id}')">Mở phòng làm việc</button>
+        <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="openTeamEditor('${tm.id}')">Cấu hình & Tệp</button>
+        ${!tm.builtin ? `<button type="button" class="btn-danger tap" style="height:36px;font-size:13px;" onclick="deleteCustomTeam('${tm.id}')">Xóa</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function openTeamWorkspace(teamId) {
+  if (!canUseTeams()) return showToast("Đội ngũ AI yêu cầu Key hạng Pro Max trở lên", "warn");
+  S.activeTeamId = teamId;
+  S.activeTutorId = null;
+  // Open latest chat of this team or start fresh
+  const existing = S.chats.find(c => c.teamId === teamId);
+  S.activeChatId = existing ? existing.id : null;
+  switchView("chat");
+  setWorkMode("chat", false);
+  renderMessages(); renderChatsList(); renderMemoryBar(); renderTopContextPill();
+  showToast(`Đã vào phòng ${S.teams.find(t => t.id === teamId)?.name || "Team"}`);
+}
+
+let teamDraft = null;
+let pickingMemberIdx = -1;
+function openTeamEditor(teamId = null) {
+  if (!canUseTeams()) return showToast("Đội ngũ AI yêu cầu Key hạng Pro Max trở lên", "warn");
+  const mods = getAllowedRealModels();
+  const defMod = mods[0]?.id || "gpt-6.2-sol";
+  const orig = teamId ? S.teams.find(t => t.id === teamId) : null;
+  teamDraft = orig ? JSON.parse(JSON.stringify(orig)) : {
+    id: "team-" + Date.now(),
+    name: "",
+    desc: "",
+    builtin: false,
+    coordMode: "sequential",
+    pauseAfterFirst: false,
+    maxFixLoops: 0,
+    members: [
+      { id: "m1", role: "Chuyên gia 1 · Phân tích", prompt: "Phân tích kỹ đề bài, tìm insight và lập dàn ý chi tiết.", modelId: defMod, enabled: true, files: [] },
+      { id: "m2", role: "Chuyên gia 2 · Thực thi", prompt: "Dựa trên bản phân tích để xây dựng sản phẩm/bài làm hoàn chỉnh nhất.", modelId: defMod, enabled: true, files: [] }
+    ]
+  };
+  switchView("team-editor");
+  renderTeamEditorBody();
+}
+
+function renderTeamEditorBody() {
+  const box = document.getElementById("team-editor-body");
+  if (!box || !teamDraft) return;
+  const mods = getAllowedRealModels();
+  const fallbackId = mods[0]?.id || "gpt-6.2-sol";
+
+  box.innerHTML = `<div class="card-item lg-card">
+    <h3 style="font-size:17px;font-weight:520;margin-bottom:4px;">${teamDraft.builtin ? "Cấu hình Team Lập trình 4-Agent" : "Thiết lập Đội ngũ AI (2–6 thành viên)"}</h3>
+    <label class="f-lbl">Tên Đội ngũ</label>
+    <input id="te-name" class="field" value="${esc(teamDraft.name)}" ${teamDraft.builtin?"readonly":""} placeholder="VD: Team Nghiên cứu & Chiến lược" oninput="teamDraft.name=this.value" />
+    <label class="f-lbl">Mô tả mục tiêu chung</label>
+    <input id="te-desc" class="field" value="${esc(teamDraft.desc)}" placeholder="VD: Phân tích thị trường, phản biện và tổng hợp" oninput="teamDraft.desc=this.value" />
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div>
+        <label class="f-lbl">Kiểu phối hợp nhóm</label>
+        <select class="field" onchange="teamDraft.coordMode=this.value">
+          <option value="sequential" ${teamDraft.coordMode!=="council"?"selected":""}>Dây chuyền nối tiếp (1→2→3...)</option>
+          <option value="council" ${teamDraft.coordMode==="council"?"selected":""}>Hội đồng thảo luận (Độc lập + Tổng hợp)</option>
+        </select>
+      </div>
+      <div>
+        <label class="f-lbl">Tự vá lỗi (khi bước cuối FAIL)</label>
+        <select class="field" onchange="teamDraft.maxFixLoops=Number(this.value)">
+          <option value="0" ${!teamDraft.maxFixLoops?"selected":""}>Tắt</option>
+          <option value="1" ${teamDraft.maxFixLoops===1?"selected":""}>Tối đa 1 vòng</option>
+          <option value="2" ${teamDraft.maxFixLoops===2?"selected":""}>Tối đa 2 vòng</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="s-row" style="margin-top:6px;" onclick="teamDraft.pauseAfterFirst=!teamDraft.pauseAfterFirst;this.querySelector('.sw').classList.toggle('on',teamDraft.pauseAfterFirst);haptic('switch')">
+      <span>Dừng duyệt kết quả sau Thành viên 1</span>
+      <div class="sw ${teamDraft.pauseAfterFirst?"on":""}"></div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px;">
+    <strong style="font-size:14.5px;" class="num">Danh sách Thành viên (${teamDraft.members.length}/6)</strong>
+    ${!teamDraft.builtin && teamDraft.members.length < 6 ? `<button type="button" class="btn-blue tap" style="height:34px;font-size:12.5px;" onclick="addTeamMemberDraft()">+ Thêm thành viên</button>` : ""}
+  </div>
+
+  ${teamDraft.members.map((m, idx) => {
+    if (!mods.some(x => x.id === m.modelId)) m.modelId = fallbackId;
+    return `<div class="member-editor-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:520;">
+          <input type="checkbox" ${m.enabled!==false?"checked":""} onchange="teamDraft.members[${idx}].enabled=this.checked" style="width:16px;height:16px;accent-color:var(--accent);" />
+          <span>Thành viên ${idx + 1}</span>
+        </label>
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="btn-s tap" style="height:30px;padding:0 10px;font-size:12px;" onclick="triggerMemberFilePick(${idx})">+ Đính kèm File</button>
+          ${!teamDraft.builtin && teamDraft.members.length > 2 ? `<button type="button" class="mini-act tap" onclick="teamDraft.members.splice(${idx},1);renderTeamEditorBody()">${ICON_X}</button>` : ""}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div><label class="f-lbl" style="margin-top:0;">Vai trò</label><input class="field" style="font-size:14px;" value="${esc(m.role)}" oninput="teamDraft.members[${idx}].role=this.value" /></div>
+        <div><label class="f-lbl" style="margin-top:0;">Model riêng</label>
+          <select class="field" style="font-size:13.5px;" onchange="teamDraft.members[${idx}].modelId=this.value">
+            ${mods.map(mo => `<option value="${esc(mo.id)}" ${m.modelId===mo.id?"selected":""}>${esc(mo.short || mo.title)} ${mo.cost_label?`(${mo.cost_label})`:""}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <label class="f-lbl">Chỉ dẫn chuyên môn (Prompt)</label>
+      <textarea class="field" rows="3" style="font-size:13.5px;" oninput="teamDraft.members[${idx}].prompt=this.value">${esc(m.prompt || "")}</textarea>
+      ${(m.files || []).length ? `<div class="file-tag-list">${m.files.map((f, fi) => `<span class="file-mini-tag">${esc(f.name)} (${Math.max(1, Math.round((f.content||"").length/1024))}KB)<button type="button" onclick="teamDraft.members[${idx}].files.splice(${fi},1);renderTeamEditorBody()">×</button></span>`).join("")}</div>` : ""}
+    </div>`;
+  }).join("")}`;
+}
+
+function addTeamMemberDraft() {
+  if (!teamDraft || teamDraft.members.length >= 6) return;
+  const mods = getAllowedRealModels();
+  const n = teamDraft.members.length + 1;
+  teamDraft.members.push({ id: "m" + Date.now(), role: `Thành viên ${n}`, prompt: "Phân tích và đóng góp góc nhìn chuyên sâu cho yêu cầu của nhóm.", modelId: mods[0]?.id || "gpt-6.2-sol", enabled: true, files: [] });
+  renderTeamEditorBody();
+}
+function triggerMemberFilePick(idx) { pickingMemberIdx = idx; document.getElementById("in-member-file").click(); }
+async function handleMemberFilePick(files) {
+  if (pickingMemberIdx < 0 || !teamDraft?.members?.[pickingMemberIdx]) return;
+  const mem = teamDraft.members[pickingMemberIdx];
+  mem.files = mem.files || [];
+  for (const f of files || []) {
+    const txt = (await f.text()).slice(0, 30000);
+    let digest = "";
+    if (txt.length > 3500) {
+      showToast(`Đang lọc gọn tệp ${f.name} bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"}...`);
+      try {
+        const r = await apiFetch("/ai/digest", { method: "POST", body: { readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol", instruction: `Tóm tắt trọng tâm tài liệu "${f.name}" cho vai trò "${mem.role}".`, content: txt } });
+        if (r.ok) digest = (await r.json()).digest || "";
+      } catch {}
+    }
+    mem.files.push({ name: f.name, content: txt.slice(0, 12000), digest });
+  }
+  document.getElementById("in-member-file").value = "";
+  renderTeamEditorBody(); haptic("ok"); showToast("Đã đính kèm tệp cho thành viên");
+}
+async function saveCustomTeam() {
+  if (!teamDraft) return;
+  if (!teamDraft.name.trim()) return showToast("Nhập tên Đội ngũ", "warn");
+  if (!teamDraft.members.some(m => m.enabled !== false)) return showToast("Bật ít nhất 1 thành viên", "warn");
+  await dbPut("teams", teamDraft);
+  S.teams = await dbAll("teams");
+  haptic("ok"); showToast(`Đã lưu ${teamDraft.name}`, "ok");
+  switchView("teams");
+}
+async function deleteCustomTeam(id) {
+  await dbDel("teams", id);
+  S.teams = S.teams.filter(t => t.id !== id);
+  if (S.activeTeamId === id) S.activeTeamId = null;
+  renderTeamsPage(); haptic("ok"); showToast("Đã xóa Team");
+}
+
+async function runTeamPipeline(chat, team, userPrompt, resumeMsg = null, startAtIdx = 0) {
+  if (!canUseTeams()) return showToast("Đội ngũ AI yêu cầu Key hạng Pro Max trở lên", "warn");
+  const activeMembers = (team.members || []).filter(m => m.enabled !== false);
+  if (!activeMembers.length) return showToast("Team chưa bật thành viên nào", "warn");
+
+  let aiMsg = resumeMsg;
+  if (!aiMsg) {
+    aiMsg = {
+      id: "m-" + (Date.now() + 1), role: "assistant", text: "",
+      modelLabel: `${team.name} (${team.coordMode === "council" ? "Hội đồng" : "Dây chuyền"})`,
+      streaming: true,
+      pipeline: {
+        teamId: team.id, prompt: userPrompt, steps: [],
+        awaitingApproval: false, blueprint: "", codeOutput: "", reviewOutput: "", finalCode: null
+      },
+      ts: Date.now()
+    };
+    chat.messages.push(aiMsg);
+  } else {
+    aiMsg.streaming = true;
+    aiMsg.pipeline.awaitingApproval = false;
+  }
+
+  const pipe = aiMsg.pipeline;
+  const ctxObj = getActiveContextForChat(chat);
+  const sharedCtxBlock = ctxObj?.content ? `\n\nHỒ SƠ NGỮ CẢNH CHUNG (${ctxObj.title}):\n${ctxObj.content.slice(0, 5000)}` : "";
+
+  S.streaming = true; S.abort = new AbortController(); updateOrbButton();
+  renderMessages(); scrollToBottom(true);
+  bgStartTask(`${team.name} đang làm việc`, `Bắt đầu ${activeMembers.length} thành viên...`);
+
+  const runMemberStep = async (mem, stepNum, sysExtra, contentIn) => {
+    const modObj = S.models.find(m => m.id === mem.modelId && m.allowed) || getAllowedRealModels()[0];
+    const modId = modObj?.id || S.cfg.selectedModel;
+    const filesTxt = (mem.files || []).length
+      ? "\n\nTÀI LIỆU RIÊNG CỦA VAI TRÒ NÀY:\n" + mem.files.map(f => `[${f.name}]\n${f.digest || f.content.slice(0, 3200)}`).join("\n\n")
+      : "";
+    const step = {
+      id: "st-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      role: mem.id, num: String(stepNum), title: mem.role,
+      modelLabel: modObj?.short || modId, status: "running", text: ""
+    };
+    pipe.steps.push(step);
+    renderMessages(); scrollToBottom(false);
+    bgStartTask(`${team.name} · Bước ${stepNum}`, `${mem.role} (${step.modelLabel}) đang xử lý...`);
+
+    let raf = false;
+    const paint = () => {
+      raf = false;
+      const el = document.getElementById("pipe-md-" + step.id);
+      if (el) { el.innerHTML = renderMd(step.text); if (isNearBottom()) scrollToBottom(false); }
+    };
+    const fullSys = `Bạn là thành viên "${mem.role}" trong đội ngũ "${team.name}".\nCHỈ DẪN VAI TRÒ: ${mem.prompt}${filesTxt}${sharedCtxBlock}`;
+    const { text, slot } = await callStatelessAgent(chat, modId, mem.id, fullSys, contentIn, full => {
+      step.text = full;
+      if (!raf) { raf = true; requestAnimationFrame(paint); }
+    });
+    step.text = text; step.status = "done";
+    if (slot) aiMsg.slot = slot;
+    renderMessages(); scrollToBottom(false);
+    return text;
+  };
+
+  try {
+    let lastOutput = pipe.blueprint || "";
+    const councilOpinions = [];
+
+    for (let i = startAtIdx; i < activeMembers.length; i++) {
+      const mem = activeMembers[i];
+      await savePendingTask({ chatId: chat.id, teamId: team.id, teamName: team.name, msgId: aiMsg.id, prompt: pipe.prompt, nextIdx: i });
+
+      let inputTxt = "";
+      if (team.coordMode === "council") {
+        // Council Mode (Đột phá 6): Members 1..N-1 analyze independently, Last member synthesizes!
+        const isChair = i === activeMembers.length - 1 && activeMembers.length >= 2;
+        inputTxt = isChair
+          ? `YÊU CẦU GỐC:\n${pipe.prompt}\n\nÝ KIẾN ĐỘC LẬP TỪ CÁC THÀNH VIÊN HỘI ĐỒNG:\n${councilOpinions.join("\n\n")}\n\nNHIỆM VỤ CỦA BẠN (CHỦ TỌA TỔNG HỢP): So sánh, phản biện các điểm mâu thuẫn và chốt phương án tối ưu nhất.`
+          : `YÊU CẦU GỐC:\n${pipe.prompt}\n\nHãy phân tích độc lập từ đúng góc nhìn chuyên môn "${mem.role}" của bạn.`;
+      } else {
+        // Sequential Pipeline Mode
+        inputTxt = i === 0
+          ? `YÊU CẦU DỰ ÁN:\n${pipe.prompt}`
+          : `YÊU CẦU GỐC:\n${pipe.prompt}\n\nKẾT QUẢ TỪ CÁC BƯỚC TRƯỚC:\n${pipe.steps.filter(s => s.status === "done").slice(-2).map(s => `### ${s.title}\n${s.text.slice(0, 5500)}`).join("\n\n")}`;
+      }
+
+      const out = await runMemberStep(mem, i + 1, "", inputTxt);
+      lastOutput = out;
+      if (i === 0) pipe.blueprint = out;
+      if (team.coordMode === "council") councilOpinions.push(`### ${mem.role}\n${out.slice(0, 4500)}`);
+      const codeHit = extractBestCodeBlock(out);
+      if (codeHit) { pipe.codeOutput = out; pipe.finalCode = codeHit; }
+
+      // Pause after Member 1 for user approval?
+      if (i === 0 && team.pauseAfterFirst && activeMembers.length > 1 && !resumeMsg) {
+        pipe.awaitingApproval = true;
+        aiMsg.streaming = false; S.streaming = false; S.abort = null;
+        bgStopTask();
+        await savePendingTask(null);
+        await apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+        renderMessages(); updateOrbButton();
+        showToast("Bước 1 đã xong · Kiểm tra rồi bấm Duyệt & Chạy tiếp");
+        return;
+      }
+
+      // Auto-fix loop if final member returns STATUS: FAIL and maxFixLoops > 0
+      if (i === activeMembers.length - 1 && Number(team.maxFixLoops || 0) > 0 && /STATUS\s*:\s*FAIL/i.test(out.slice(0, 260))) {
+        const coderMem = activeMembers.find(x => x.id === "coder") || activeMembers[Math.max(0, activeMembers.length - 2)];
+        const maxL = Math.min(2, Number(team.maxFixLoops || 1));
+        let failReport = out;
+        for (let loop = 1; loop <= maxL; loop++) {
+          pipe.steps[pipe.steps.length - 1].status = "fail";
+          const fixed = await runMemberStep(coderMem, `${i}.${loop}`, "", `SỬA LỖI VÒNG ${loop} DỰA TRÊN BÁO CÁO:\n${failReport}\n\nBẢN CŨ:\n${pipe.codeOutput || lastOutput}`);
+          pipe.codeOutput = fixed; lastOutput = fixed;
+          pipe.finalCode = extractBestCodeBlock(fixed) || pipe.finalCode;
+          failReport = await runMemberStep(mem, `${i + 1}.${loop}`, "", `KIỂM TRA LẠI SAU KHI VÁ LỖI VÒNG ${loop}:\n${fixed}`);
+          if (!/STATUS\s*:\s*FAIL/i.test(failReport.slice(0, 260))) break;
+        }
+      }
+    }
+
+    aiMsg.text = pipe.codeOutput || lastOutput || "Đội ngũ đã hoàn tất.";
+    await savePendingTask(null);
+    haptic("ok");
+    showToast(`${team.name} đã hoàn tất`, "ok");
+    if (document.hidden) bgNotifyDone(`${team.name} đã hoàn tất`, aiMsg.text.replace(/[#*`]/g, "").slice(0, 120));
+  } catch (e) {
+    pipe.steps.push({ id: "st-err-" + Date.now(), role: "error", num: "!", title: "Tạm dừng do gián đoạn", modelLabel: "", status: "fail", text: e.name === "AbortError" ? "Đã dừng theo yêu cầu." : e.message });
+    aiMsg.text = `Tạm dừng: ${e.message}`;
+    if (e.name === "AbortError") await savePendingTask(null);
+  } finally {
+    aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
+    bgStopTask();
+    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+    syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
+  }
+}
+
+// Override approveArchitectAndContinue to work cleanly with v3.3 Teams!
+approveArchitectAndContinue = async function(msgId) {
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const msg = chat?.messages.find(m => m.id === msgId);
+  if (!msg?.pipeline) return;
+  const ta = document.getElementById("bp-edit-" + msgId);
+  if (ta) msg.pipeline.blueprint = ta.value.trim();
+  const team = S.teams.find(t => t.id === (msg.pipeline.teamId || "team-coding-4agent")) || S.teams[0];
+  haptic("ok");
+  await runTeamPipeline(chat, team, msg.pipeline.prompt, msg, 1);
+};
+
+/* =========================================================================
+   v3.3 MODULE 6: GIA SƯ AI (7.1A + 7.2B + 7.3AB + 7.4B + ĐỘT PHÁ)
+   ========================================================================= */
+const WEEK_DAYS = [[1, "T2"], [2, "T3"], [3, "T4"], [4, "T5"], [5, "T6"], [6, "T7"], [0, "CN"]];
+function todayKeyLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function timeToMins(hhmm) {
+  const [h, m] = String(hhmm || "20:00").split(":").map(Number);
+  return (Number.isFinite(h) ? h : 20) * 60 + (Number.isFinite(m) ? m : 0);
+}
+function minsToTime(mins) {
+  const m = ((mins % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+// 7.1A: Schedule Conflict Detector across all Tutors + Smart Free Slot Suggestion
+function findScheduleConflicts(draft) {
+  const conflicts = [];
+  const dDays = draft.scheduleDays || [];
+  const dMin = timeToMins(draft.scheduleTime);
+  for (const other of S.tutors) {
+    if (other.id === draft.id) continue;
+    const oDays = other.scheduleDays || [];
+    const overlapDays = dDays.filter(day => oDays.includes(day));
+    if (!overlapDays.length) continue;
+    const oMin = timeToMins(other.scheduleTime);
+    if (Math.abs(dMin - oMin) < 45) {
+      const dayNames = overlapDays.map(x => WEEK_DAYS.find(w => w[0] === x)?.[1] || x).join(", ");
+      conflicts.push({ other, dayNames, suggested: minsToTime(oMin + 60) });
+    }
+  }
+  return conflicts;
+}
+
+// 7.2B: Compute next alarm timestamp & schedule/cancel native Android reminder
+function getNextReminderTimestamp(tutor, skipToday = false) {
+  const days = tutor.scheduleDays || [];
+  if (!days.length) return null;
+  const [hh, mm] = String(tutor.scheduleTime || "20:00").split(":").map(Number);
+  const now = new Date();
+  for (let offset = (skipToday ? 1 : 0); offset <= 7; offset++) {
+    const cand = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, hh || 20, mm || 0, 0, 0);
+    if (cand.getTime() > Date.now() + 30000 && days.includes(cand.getDay())) {
+      return cand.getTime();
+    }
+  }
+  return null;
+}
+function syncTutorAlarm(tutor) {
+  const nat = getNativeBg();
+  if (!nat?.scheduleTutorReminder) return;
+  if (tutor.reminderEnabled === false) { nat.cancelTutorReminder({ tutorId: tutor.id }); return; }
+  const studiedToday = (tutor.studiedDates || []).includes(todayKeyLocal());
+  const nextTs = getNextReminderTimestamp(tutor, studiedToday);
+  if (!nextTs) return;
+  nat.scheduleTutorReminder({
+    tutorId: tutor.id,
+    title: `Gia sư ${tutor.name} (${tutor.subject})`,
+    body: tutor.reminderText || `Nay chưa vào học ${tutor.subject} à? Có bài tập mới đang chờ cậu đó!`,
+    triggerAtMs: nextTs
+  });
+}
+function syncAllTutorAlarms() { (S.tutors || []).forEach(syncTutorAlarm); }
+
+// Đột phá: Mistake Bank due items (Spaced Repetition 1d -> 3d -> 7d)
+function getDueMistakes(tutor) {
+  const now = Date.now();
+  return (tutor?.mistakes || []).filter(m => !m.mastered && (m.nextReviewAt || 0) <= now);
+}
+async function markTutorStudiedToday(tutor) {
+  const tk = todayKeyLocal();
+  tutor.studiedDates = tutor.studiedDates || [];
+  if (!tutor.studiedDates.includes(tk)) {
+    tutor.studiedDates.push(tk);
+    // Compute streak
+    const yest = new Date(Date.now() - 86400000);
+    const yk = `${yest.getFullYear()}-${String(yest.getMonth()+1).padStart(2,"0")}-${String(yest.getDate()).padStart(2,"0")}`;
+    tutor.streak = tutor.studiedDates.includes(yk) ? (tutor.streak || 0) + 1 : 1;
+    await dbPut("tutors", tutor);
+    syncTutorAlarm(tutor); // Auto-cancels today's reminder and schedules next session!
+    renderActiveContextBanner();
+  }
+}
+
+// Đột phá: Auto Tutor smart model routing (Sol for normal drills, Opus/Astra for heavy proofs/essays)
+function resolveTutorModelId(tutor, queryText) {
+  if (tutor.modelId && tutor.modelId !== "auto_tutor") return tutor.modelId;
+  const mods = getAllowedRealModels();
+  const isHeavy = (queryText || "").length > 240 || /(chứng minh|bài văn|nghị luận|phân tích sâu|đề thi|vận dụng cao|chấm bài|viết đoạn|giải chi tiết|so sánh)/i.test(queryText || "");
+  const pick = prefs => { for (const p of prefs) { const f = mods.find(m => m.id === p || m.mapped === p); if (f) return f.id; } return mods[0]?.id || "gpt-6.2-sol"; };
+  return isHeavy
+    ? pick(["claude-opus-5-5", "claude-sonnet-5", "gpt-6.2-astra", "gpt-6.2-sol"])
+    : pick(["gpt-6.2-sol", "gpt-6-luna"]);
+}
+
+// 7.1A + 7.3A + Mistake Bank: Build ultra-smart compact Tutor System Prompt
+async function buildTutorSystemPrompt(tutor, queryText) {
+  const parts = [
+    `BẠN LÀ GIA SƯ AI TÊN "${tutor.name}" CHUYÊN DẠY MÔN: ${tutor.subject}.`,
+    `PHONG CÁCH & CHỈ DẪN GIẢNG DẠY: ${tutor.prompt || "Giảng dễ hiểu, ngắn gọn, có ví dụ thực tế và kiểm tra lại kiến thức."}`
+  ];
+  // 7.1A: Cross-Tutor Awareness (~100 tokens)
+  const others = S.tutors.filter(t => t.id !== tutor.id);
+  if (others.length) {
+    const peerLines = others.map(o => {
+      const ds = (o.scheduleDays || []).map(x => WEEK_DAYS.find(w => w[0] === x)?.[1]).join(",");
+      const last = (o.studiedDates || []).slice(-1)[0] || "chưa học";
+      return `- ${o.name} (môn ${o.subject}, lịch ${ds || "tự do"} lúc ${o.scheduleTime || "20:00"}, buổi gần nhất: ${last})`;
+    }).join("\n");
+    parts.push(`CÁC GIA SƯ KHÁC ĐANG CÙNG DẠY HỌC VIÊN NÀY (để bạn biết lịch tránh dồn bài quá tải và nhắc khéo tự nhiên khi phù hợp):\n${peerLines}`);
+  }
+  // 7.3A: Tier 1 Base Files + Tier 2 Real Class Notes (compact digested!)
+  if ((tutor.baseFiles || []).length) {
+    parts.push("HỒ SƠ TÀI LIỆU NỀN:\n" + tutor.baseFiles.map(f => `[${f.name}]\n${f.digest || (f.content || "").slice(0, 2200)}`).join("\n\n").slice(0, 4500));
+  }
+  if ((tutor.classNotes || []).length) {
+    parts.push("KIẾN THỨC THỰC TẾ TRÊN LỚP & ĐỀ MỚI ĐÃ LƯU:\n" + tutor.classNotes.slice(0, 8).map(n => `- (${n.date}) ${n.title ? n.title + ": " : ""}${n.digest || n.content.slice(0, 600)}`).join("\n").slice(0, 3500));
+  }
+  // Mistake Bank due items
+  const due = getDueMistakes(tutor);
+  if (due.length) {
+    parts.push("SỔ LỖI HAY SAI CẦN LỒNG GHÉP ÔN LẠI HÔM NAY:\n" + due.slice(0, 4).map(m => `- ${m.note}`).join("\n"));
+  }
+  return parts.join("\n\n");
+}
+
+function detectNewClassKnowledge(text) {
+  return /(hôm nay|trên lớp|thầy dạy|cô dạy|giáo viên|mẹo mới|công thức mới|dạng bài mới|đề cương|kiểm tra sắp tới)/i.test(text || "") && (text || "").length >= 18;
+}
+function buildTutorProactiveBanner(tutor) {
+  const studiedToday = (tutor.studiedDates || []).includes(todayKeyLocal());
+  const due = getDueMistakes(tutor);
+  if (studiedToday && !due.length) return "";
+  return `<div class="tutor-proactive-card stagger-item">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <strong style="font-size:14px;">Gia sư ${esc(tutor.name)} · ${esc(tutor.subject)}</strong>
+      ${tutor.streak ? `<span class="streak-pill">Chuỗi ${tutor.streak} ngày</span>` : `<span class="tag-st st-unused">Buổi học hôm nay</span>`}
+    </div>
+    <div style="font-size:13px;color:var(--ink-2);line-height:1.5;">
+      ${!studiedToday ? esc(tutor.reminderText || `Hôm nay chưa vào học ${tutor.subject} à? Mình đã sẵn sàng giao bài tập & kiến thức mới cho cậu!`) : `Cậu đang có ${due.length} lỗi sai đến lịch ôn lại (1/3/7 ngày).`}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${!studiedToday ? `<button type="button" class="btn-p tap" style="height:36px;font-size:13px;" onclick="triggerTutorDailyStart('${tutor.id}')">Nhận bài tập & Kiến thức hôm nay</button>` : ""}
+      ${due.length ? `<button type="button" class="btn-blue tap" style="height:36px;font-size:13px;" onclick="triggerTutorMistakeReview('${tutor.id}')">Ôn lại ${due.length} lỗi hay sai</button>` : ""}
+      <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="openTutorKnowledgeModal('${tutor.id}')">Thêm đề / Ghi chú trên lớp</button>
+    </div>
+  </div>`;
+}
+function triggerTutorDailyStart(tutorId) {
+  const t = S.tutors.find(x => x.id === tutorId); if (!t) return;
+  sendPrompt(`Chào ${t.name}! Hôm nay mình bắt đầu học ${t.subject}. Hãy giao cho mình 1 kiến thức trọng tâm mới (hoặc ôn tiếp bài trước) kèm 2-3 bài tập thực hành vừa sức nhé.`);
+}
+function triggerTutorMistakeReview(tutorId) {
+  const t = S.tutors.find(x => x.id === tutorId); if (!t) return;
+  const due = getDueMistakes(t);
+  sendPrompt(`Hãy tạo câu hỏi tương tự để kiểm tra lại giúp mình các lỗi hay sai đến hạn ôn hôm nay:\n${due.map((m, i) => `${i + 1}. ${m.note}`).join("\n")}`);
+}
+
+function renderTutorsPage() {
+  const box = document.getElementById("tutors-body");
+  if (!canUseTutors()) {
+    box.innerHTML = `<div class="card-item lg-card"><strong>Tính năng Gia sư AI yêu cầu Key hạng Pro Max hoặc Ultra</strong><p class="p-sub" style="margin:6px 0 0;">Nâng cấp gói Key để tự tạo đội ngũ Gia sư AI liên kết lịch học, tự nhắc bài và quản lý sổ lỗi sai.</p></div>`;
+    return;
+  }
+  if (!S.tutors.length) {
+    box.innerHTML = `<div class="card-item lg-card"><strong>Chưa có Gia sư AI nào</strong><p class="p-sub" style="margin:6px 0 12px;">Tạo Gia sư cho từng môn học (Toán, Văn, Tiếng Anh, Hóa, Giao dịch...). Khi tạo từ 2 gia sư trở lên, lịch học sẽ tự kiểm tra trùng giờ và các gia sư tự biết lịch của nhau.</p><button type="button" class="btn-p tap" onclick="openTutorEditor()">+ Tạo Gia sư đầu tiên</button></div>`;
+    return;
+  }
+  box.innerHTML = S.tutors.map((t, idx) => {
+    const daysLbl = (t.scheduleDays || []).map(x => WEEK_DAYS.find(w => w[0] === x)?.[1]).join(", ") || "Linh hoạt";
+    const dueCnt = getDueMistakes(t).length;
+    const studiedToday = (t.studiedDates || []).includes(todayKeyLocal());
+    const modLbl = t.modelId === "auto_tutor" ? "Auto Tutor" : (S.models.find(m => m.id === t.modelId)?.short || t.modelId);
+    return `<div class="card-item lg-card stagger-item" style="--stagger-i:${idx}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <strong style="font-size:15.5px;">${esc(t.name)}</strong>
+          <span class="tag-st tier-pro">${esc(t.subject)}</span>
+          ${studiedToday ? `<span class="tag-st st-active">Đã học hôm nay</span>` : `<span class="tag-st st-pending">Chưa học hôm nay</span>`}
+          ${t.streak ? `<span class="streak-pill">Chuỗi ${t.streak}d</span>` : ""}
+        </div>
+        <span class="tag-quiet">${esc(modLbl)}</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.55;">
+        Lịch học: <b>${esc(daysLbl)}</b> lúc <b class="num">${esc(t.scheduleTime || "20:00")}</b> · ${(t.baseFiles||[]).length} tệp gốc · ${(t.classNotes||[]).length} ghi chú lớp${dueCnt ? ` · <b style="color:var(--warn-ink);">${dueCnt} lỗi cần ôn</b>` : ""}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">
+        <button type="button" class="btn-p tap" style="height:36px;font-size:13px;" onclick="openTutorWorkspace('${t.id}')">Vào học ngay</button>
+        <button type="button" class="btn-blue tap" style="height:36px;font-size:13px;" onclick="openTutorKnowledgeModal('${t.id}')">Kho đề & Sổ lỗi</button>
+        <button type="button" class="btn-s tap" style="height:36px;font-size:13px;" onclick="openTutorEditor('${t.id}')">Sửa lịch / Prompt</button>
+        <button type="button" class="btn-danger tap" style="height:36px;font-size:13px;" onclick="deleteTutorProfile('${t.id}')">Xóa</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function openTutorWorkspace(tutorId) {
+  if (!canUseTutors()) return showToast("Gia sư AI yêu cầu Key hạng Pro Max trở lên", "warn");
+  S.activeTutorId = tutorId;
+  S.activeTeamId = null;
+  const existing = S.chats.find(c => c.tutorId === tutorId);
+  S.activeChatId = existing ? existing.id : null;
+  switchView("chat");
+  setWorkMode("chat", false);
+  renderMessages(); renderChatsList(); renderMemoryBar(); renderTopContextPill();
+}
+
+let tutorDraft = null;
+let tutorFileTarget = "base"; // "base" or "note"
+function openTutorEditor(tutorId = null) {
+  if (!canUseTutors()) return showToast("Gia sư AI yêu cầu Key hạng Pro Max trở lên", "warn");
+  const orig = tutorId ? S.tutors.find(t => t.id === tutorId) : null;
+  tutorDraft = orig ? JSON.parse(JSON.stringify(orig)) : {
+    id: "tutor-" + Date.now(),
+    name: "", subject: "", prompt: "Giảng ngắn gọn, trọng tâm thực chiến, chỉ ra bẫy đề thi và kiểm tra lại bằng câu hỏi nhỏ.",
+    modelId: "auto_tutor",
+    scheduleDays: [1, 3, 5], scheduleTime: "20:00",
+    reminderEnabled: true, reminderText: "Nay chưa vào học à? Vào làm nhanh 3 câu luyện tập nào!",
+    baseFiles: [], classNotes: [], mistakes: [], studiedDates: [], streak: 0
+  };
+  switchView("tutor-editor");
+  renderTutorEditorBody();
+}
+
+function renderTutorEditorBody() {
+  const box = document.getElementById("tutor-editor-body");
+  if (!box || !tutorDraft) return;
+  const mods = getAllowedRealModels();
+  const conflicts = findScheduleConflicts(tutorDraft);
+
+  box.innerHTML = `<div class="card-item lg-card">
+    <h3 style="font-size:17px;font-weight:520;margin-bottom:4px;">${tutorDraft.name ? "Sửa Gia sư AI" : "Tạo Gia sư AI mới"}</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div><label class="f-lbl">Tên Gia sư</label><input class="field" value="${esc(tutorDraft.name)}" placeholder="VD: Cô Lan, Thầy Minh" oninput="tutorDraft.name=this.value" /></div>
+      <div><label class="f-lbl">Môn học</label><input class="field" value="${esc(tutorDraft.subject)}" placeholder="VD: Toán 12, Tiếng Anh" oninput="tutorDraft.subject=this.value" /></div>
+    </div>
+
+    <label class="f-lbl">Model giảng dạy</label>
+    <select class="field" onchange="tutorDraft.modelId=this.value">
+      <option value="auto_tutor" ${tutorDraft.modelId==="auto_tutor"?"selected":""}>Auto Tutor (Tự chọn thông minh: Sol cho bài cơ bản, mạnh nhất cho bài khó)</option>
+      ${mods.map(m => `<option value="${esc(m.id)}" ${tutorDraft.modelId===m.id?"selected":""}>${esc(m.title)} ${m.cost_label?`(${m.cost_label})`:""}</option>`).join("")}
+    </select>
+
+    <label class="f-lbl">Phong cách & Chỉ dẫn riêng (Prompt)</label>
+    <textarea class="field" rows="4" oninput="tutorDraft.prompt=this.value">${esc(tutorDraft.prompt)}</textarea>
+
+    <label class="f-lbl">Lịch học trong tuần (Tự liên kết & kiểm tra trùng lịch giữa các Gia sư)</label>
+    <div class="day-pill-group">
+      ${WEEK_DAYS.map(([val, lbl]) => {
+        const on = (tutorDraft.scheduleDays || []).includes(val);
+        return `<button type="button" class="day-pill tap ${on?"on":""}" onclick="toggleTutorDay(${val})">${lbl}</button>`;
+      }).join("")}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+      <div><label class="f-lbl">Khung giờ học</label><input type="time" class="field num" value="${esc(tutorDraft.scheduleTime || "20:00")}" onchange="tutorDraft.scheduleTime=this.value;renderTutorEditorBody()" /></div>
+      <div style="display:flex;align-items:flex-end;">
+        <div class="s-row" style="padding:8px 10px;background:var(--row-hover);border-radius:10px;" onclick="tutorDraft.reminderEnabled=!tutorDraft.reminderEnabled;this.querySelector('.sw').classList.toggle('on',tutorDraft.reminderEnabled);haptic('switch')">
+          <span style="font-size:13px;">Nhắc học</span><div class="sw ${tutorDraft.reminderEnabled!==false?"on":""}"></div>
+        </div>
+      </div>
+    </div>
+
+    ${conflicts.length ? conflicts.map(cf => `<div class="conflict-banner">
+      <strong>Trùng lịch học:</strong> ${esc(cf.dayNames)} gần giờ học với Gia sư <b>${esc(cf.other.name)} (${esc(cf.other.subject)} · ${esc(cf.other.scheduleTime)})</b>.
+      <button type="button" class="btn-s tap" style="height:26px;padding:0 8px;font-size:11.5px;margin-left:6px;" onclick="tutorDraft.scheduleTime='${cf.suggested}';renderTutorEditorBody()">Đổi sang ${cf.suggested}</button>
+    </div>`).join("") : ""}
+
+    <label class="f-lbl">Câu nhắc thông báo (khi hôm đó chưa vào học)</label>
+    <input class="field" value="${esc(tutorDraft.reminderText || "")}" placeholder="Nay chưa vào học à?" oninput="tutorDraft.reminderText=this.value" />
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
+      <strong style="font-size:13.5px;">Tài liệu gốc / Đề cương nền (${(tutorDraft.baseFiles||[]).length})</strong>
+      <button type="button" class="btn-s tap" style="height:32px;font-size:12px;" onclick="tutorFileTarget='base';document.getElementById('in-tutor-file').click()">+ Thêm File gốc</button>
+    </div>
+    <div class="file-tag-list">
+      ${(tutorDraft.baseFiles || []).map((f, i) => `<span class="file-mini-tag">${esc(f.name)}<button type="button" onclick="tutorDraft.baseFiles.splice(${i},1);renderTutorEditorBody()">×</button></span>`).join("") || `<span style="font-size:12px;color:var(--ink-3);">Chưa đính kèm tài liệu nền</span>`}
+    </div>
+  </div>`;
+}
+function toggleTutorDay(dayVal) {
+  haptic("switch");
+  const cur = tutorDraft.scheduleDays || [];
+  tutorDraft.scheduleDays = cur.includes(dayVal) ? cur.filter(x => x !== dayVal) : [...cur, dayVal];
+  renderTutorEditorBody();
+}
+async function handleTutorFilePick(files) {
+  const targetTutor = tutorFileTarget === "base" ? tutorDraft : S.tutors.find(t => t.id === tutorFileTarget);
+  if (!targetTutor) return;
+  for (const f of files || []) {
+    const txt = (await f.text()).slice(0, 30000);
+    let digest = "";
+    if (txt.length > 3500) {
+      showToast(`Đang tóm tắt đề/tài liệu ${f.name} bằng ${S.cfg.repoReaderModel || "GPT 6.2 Sol"}...`);
+      try {
+        const r = await apiFetch("/ai/digest", { method: "POST", body: { readerModelId: S.cfg.repoReaderModel || "gpt-6.2-sol", instruction: `Trích xuất kiến thức trọng tâm, dạng bài và công thức từ tài liệu "${f.name}" môn ${targetTutor.subject}.`, content: txt } });
+        if (r.ok) digest = (await r.json()).digest || "";
+      } catch {}
+    }
+    if (tutorFileTarget === "base") {
+      targetTutor.baseFiles = targetTutor.baseFiles || [];
+      targetTutor.baseFiles.push({ name: f.name, content: txt.slice(0, 12000), digest });
+    } else {
+      targetTutor.classNotes = targetTutor.classNotes || [];
+      targetTutor.classNotes.unshift({ id: "cn-" + Date.now(), date: todayKeyLocal(), title: f.name, content: txt.slice(0, 10000), digest });
+      await dbPut("tutors", targetTutor);
+    }
+  }
+  document.getElementById("in-tutor-file").value = "";
+  haptic("ok"); showToast("Đã nạp tài liệu tối ưu token");
+  if (tutorFileTarget === "base") renderTutorEditorBody();
+  else openTutorKnowledgeModal(targetTutor.id);
+}
+async function saveTutorProfile() {
+  if (!tutorDraft) return;
+  if (!tutorDraft.name.trim() || !tutorDraft.subject.trim()) return showToast("Nhập đủ Tên Gia sư và Môn học", "warn");
+  await dbPut("tutors", tutorDraft);
+  S.tutors = await dbAll("tutors");
+  syncTutorAlarm(tutorDraft);
+  haptic("ok"); showToast(`Đã lưu Gia sư ${tutorDraft.name}`, "ok");
+  switchView("tutors");
+}
+async function deleteTutorProfile(id) {
+  try { getNativeBg()?.cancelTutorReminder?.({ tutorId: id }); } catch {}
+  await dbDel("tutors", id);
+  S.tutors = S.tutors.filter(t => t.id !== id);
+  if (S.activeTutorId === id) S.activeTutorId = null;
+  renderTutorsPage(); haptic("ok"); showToast("Đã xóa Gia sư");
+}
+
+// 7.3AB + Mistake Bank Manager Modal
+function openTutorKnowledgeModal(tutorId) {
+  const t = S.tutors.find(x => x.id === tutorId); if (!t) return;
+  const notes = t.classNotes || [], mistakes = t.mistakes || [];
+  openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:4px;">Kho kiến thức & Sổ lỗi · ${esc(t.name)}</h3>
+    <p style="font-size:12px;color:var(--ink-2);margin-bottom:10px;">Lưu đề thi mới, kiến thức dạy trên lớp và lỗi hay sai để Gia sư nhắc ôn sau 1 → 3 → 7 ngày.</p>
+
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button type="button" class="btn-blue tap" style="flex:1;height:36px;font-size:12.5px;" onclick="tutorFileTarget='${t.id}';document.getElementById('in-tutor-file').click()">+ Thêm File Đề / Tài liệu</button>
+    </div>
+
+    <label class="f-lbl" style="margin-top:4px;">Ghi chú kiến thức mới học trên lớp</label>
+    <div style="display:flex;gap:6px;">
+      <input id="tk-note-in" class="field" style="font-size:14px;" placeholder="VD: Hôm nay thầy dạy mẹo giải tích phân từng phần..." />
+      <button type="button" class="btn-p tap" style="height:44px;padding:0 14px;" onclick="addManualTutorNote('${t.id}')">Lưu</button>
+    </div>
+
+    <div style="margin-top:12px;font-size:13px;font-weight:520;">Nhật ký thực tế & Đề mới (${notes.length})</div>
+    <div style="max-height:140px;overflow-y:auto;margin-top:4px;">
+      ${notes.map((n, i) => `<div class="mem-chip-row" style="margin-bottom:4px;"><span style="flex:1;"><b>${esc(n.date)}</b> · ${esc(n.title || n.content.slice(0, 72))}</span><button type="button" class="mini-act tap" onclick="delTutorNote('${t.id}',${i})">${ICON_X}</button></div>`).join("") || `<div style="font-size:12px;color:var(--ink-3);">Chưa có ghi chú thực tế nào.</div>`}
+    </div>
+
+    <div style="margin-top:14px;font-size:13px;font-weight:520;">Sổ Lỗi Sai & Lịch ôn 1/3/7 ngày (${mistakes.length})</div>
+    <div style="display:flex;gap:6px;margin-top:4px;">
+      <input id="tk-err-in" class="field" style="font-size:14px;" placeholder="VD: Hay quên điều kiện logarit > 0..." />
+      <button type="button" class="btn-s tap" style="height:44px;padding:0 12px;" onclick="addManualTutorMistake('${t.id}')">+ Lỗi</button>
+    </div>
+    <div style="max-height:150px;overflow-y:auto;margin-top:6px;">
+      ${mistakes.map((m, i) => {
+        const due = !m.mastered && (m.nextReviewAt || 0) <= Date.now();
+        return `<div class="mem-chip-row" style="margin-bottom:4px;">
+          <span style="flex:1;">${esc(m.note.slice(0, 80))} <span class="tag-st ${m.mastered?"st-active":(due?"st-pending":"st-unused")}">${m.mastered?"Đã thuộc":(due?"Đến hạn ôn":`Mốc ${m.stageDays||1}d`)}</span></span>
+          ${!m.mastered ? `<button type="button" class="btn-s tap" style="height:26px;padding:0 8px;font-size:11px;" onclick="advanceTutorMistake('${t.id}',${i})">Đã nhớ</button>` : ""}
+          <button type="button" class="mini-act tap" onclick="delTutorMistake('${t.id}',${i})">${ICON_X}</button>
+        </div>`;
+      }).join("") || `<div style="font-size:12px;color:var(--ink-3);">Chưa có lỗi sai nào được ghi nhận.</div>`}
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <button type="button" class="btn-p tap" onclick="closeModal()">Đóng</button>
+    </div>`);
+}
+async function addManualTutorNote(tid) {
+  const t = S.tutors.find(x => x.id === tid), v = document.getElementById("tk-note-in")?.value.trim();
+  if (!t || !v) return;
+  t.classNotes = t.classNotes || [];
+  t.classNotes.unshift({ id: "cn-" + Date.now(), date: todayKeyLocal(), title: "", content: v, digest: "" });
+  await dbPut("tutors", t); haptic("ok"); openTutorKnowledgeModal(tid);
+}
+async function delTutorNote(tid, idx) {
+  const t = S.tutors.find(x => x.id === tid); if (!t) return;
+  t.classNotes.splice(idx, 1); await dbPut("tutors", t); openTutorKnowledgeModal(tid);
+}
+async function addManualTutorMistake(tid) {
+  const t = S.tutors.find(x => x.id === tid), v = document.getElementById("tk-err-in")?.value.trim();
+  if (!t || !v) return;
+  t.mistakes = t.mistakes || [];
+  t.mistakes.unshift({ id: "mk-" + Date.now(), note: v, stageDays: 1, nextReviewAt: Date.now() + 86400000, mastered: false });
+  await dbPut("tutors", t); haptic("ok"); openTutorKnowledgeModal(tid);
+}
+async function advanceTutorMistake(tid, idx) {
+  const t = S.tutors.find(x => x.id === tid), m = t?.mistakes?.[idx]; if (!m) return;
+  if (m.stageDays === 1) { m.stageDays = 3; m.nextReviewAt = Date.now() + 3 * 86400000; }
+  else if (m.stageDays === 3) { m.stageDays = 7; m.nextReviewAt = Date.now() + 7 * 86400000; }
+  else { m.mastered = true; }
+  await dbPut("tutors", t); haptic("ok"); openTutorKnowledgeModal(tid); renderActiveContextBanner();
+}
+async function delTutorMistake(tid, idx) {
+  const t = S.tutors.find(x => x.id === tid); if (!t) return;
+  t.mistakes.splice(idx, 1); await dbPut("tutors", t); openTutorKnowledgeModal(tid); renderActiveContextBanner();
+}
+async function saveMessageToTutorNotes(tid, msgId) {
+  const t = S.tutors.find(x => x.id === tid);
+  const chat = S.chats.find(c => c.id === S.activeChatId);
+  const msg = chat?.messages.find(m => m.id === msgId);
+  if (!t || !msg?.text) return;
+  t.classNotes = t.classNotes || [];
+  t.classNotes.unshift({ id: "cn-" + Date.now(), date: todayKeyLocal(), title: "Ghi chú trong buổi học", content: msg.text.slice(0, 2000), digest: "" });
+  msg.suggestSaveTutorId = null;
+  await dbPut("tutors", t);
+  renderMessages(); haptic("ok"); showToast(`Đã lưu vào Kho Gia sư ${t.name}`, "ok");
+}
+function dismissTutorSuggest(msgId) {
+  const msg = S.chats.find(c => c.id === S.activeChatId)?.messages.find(m => m.id === msgId);
+  if (msg) { msg.suggestSaveTutorId = null; renderMessages(); }
+}
+async function saveReplyToTutorMistake(tid, msgId) {
+  const t = S.tutors.find(x => x.id === tid);
+  const txt = getMsgText(msgId);
+  if (!t || !txt) return;
+  t.mistakes = t.mistakes || [];
+  t.mistakes.unshift({ id: "mk-" + Date.now(), note: txt.replace(/[#*`]/g, "").slice(0, 200), stageDays: 1, nextReviewAt: Date.now() + 86400000, mastered: false });
+  await dbPut("tutors", t);
+  haptic("ok"); showToast("Đã thêm vào Sổ Lỗi Sai (sẽ nhắc ôn sau 1 ngày)", "ok");
+}
 
 boot();
