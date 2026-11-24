@@ -2185,3 +2185,336 @@ body.low-power-motion *::after {
     animation: dpFade 150ms linear !important;
   }
 }
+
+
+/* ===== v3.6: CONTEXT METER, HASH TAGGER, SIGNAL CARD, ARENA COMPARE, CANVAS CONSOLE, TTS BAR & CHECKPOINTS ===== */
+#hash-popup {
+  position: absolute;
+  bottom: calc(100% + var(--s-2));
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border-radius: var(--r-md);
+  padding: var(--s-2);
+  display: none;
+  transform-origin: bottom center;
+}
+#hash-popup.open {
+  display: block;
+  animation: slashPop 180ms var(--ease-soft);
+}
+
+.slash-group-lbl {
+  padding: 6px var(--s-3) 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.hero-prompts-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2);
+  max-width: 560px;
+  margin-top: var(--s-2);
+}
+.hero-prompt-pill {
+  height: 34px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--row-hover);
+  border: 1px solid var(--rim);
+}
+@media (hover: hover) {
+  .hero-prompt-pill:hover {
+    background: var(--row-active);
+    color: var(--ink);
+    border-color: var(--rim-hi);
+  }
+}
+
+/* Context Guard 75% Bar & Pre-Send Token Estimator */
+.ctx-guard-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-rim);
+  color: var(--warn-ink);
+  font-size: 12.5px;
+}
+.token-est-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 3px var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  border: 1px solid var(--rim);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+}
+
+/* /context 4-segment visual meter */
+.ctx-meter-bar {
+  width: 100%;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: var(--row-active);
+  overflow: hidden;
+  display: flex;
+  margin: var(--s-2) 0 var(--s-3);
+}
+.ctx-seg-chat { background: var(--accent); height: 100%; }
+.ctx-seg-tools { background: var(--ok); height: 100%; }
+.ctx-seg-skills { background: var(--warn); height: 100%; }
+.ctx-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+  font-size: 12.5px;
+}
+.ctx-leg-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--row-hover);
+}
+.ctx-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* Trading Signal Card (apiai-signal) & Lot Calculator */
+.signal-card {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--rim-hi);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  box-shadow: var(--shadow-card);
+}
+.signal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+.sig-dir-buy {
+  padding: 3px var(--s-3);
+  border-radius: var(--r-xs);
+  background: var(--ok-soft);
+  border: 1px solid var(--ok-rim);
+  color: var(--ok-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sig-dir-sell {
+  padding: 3px var(--s-3);
+  border-radius: var(--r-xs);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-rim);
+  color: var(--danger-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sig-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+@media (min-width: 560px) {
+  .sig-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.sig-cell {
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--surface-0);
+  border: 1px solid var(--rim);
+}
+.sig-lbl { font-size: 11px; color: var(--ink-3); }
+.sig-val { font-size: 14px; font-weight: 500; color: var(--ink); margin-top: 2px; font-family: var(--font-mono); }
+.lot-calc-box {
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--row-hover);
+  border: 1px solid var(--rim);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.lot-calc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+.lot-in {
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-xs);
+  border: 1px solid var(--rim-hi);
+  background: var(--surface-0);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+/* Arena /compare 2-Model Card */
+.compare-card {
+  width: 100%;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--accent-rim);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.compare-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--rim);
+  background: var(--surface-0);
+}
+.compare-tab {
+  min-height: 42px;
+  padding: var(--s-2) var(--s-3);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+}
+.compare-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  background: var(--row-hover);
+}
+.compare-pane { padding: var(--s-4); }
+.compare-foot {
+  padding: var(--s-2) var(--s-3) var(--s-3);
+  border-top: 1px solid var(--rim);
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+/* Smart Bookmark Checkpoint & Search Snippet */
+.checkpoint-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-xs);
+  background: var(--ok-soft);
+  border: 1px solid var(--ok-rim);
+  color: var(--ok-ink);
+  font-size: 11px;
+  font-weight: 500;
+}
+.act-icon.bookmarked { color: var(--ok-ink); }
+.search-snippet {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Smart TTS Mini Bar */
+.tts-mini-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: 6px var(--s-3);
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+}
+
+/* Canvas Mini-IDE Console */
+.canvas-console {
+  border-top: 1px solid var(--rim);
+  background: var(--surface-0);
+  max-height: 156px;
+  display: flex;
+  flex-direction: column;
+}
+.cv-con-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px var(--s-3);
+  border-bottom: 1px solid var(--rim);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.cv-con-logs {
+  overflow-y: auto;
+  padding: 6px var(--s-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cv-log-err { color: var(--danger-ink); }
+.cv-log-warn { color: var(--warn-ink); }
+.cv-log-info { color: var(--ink-2); }
+
+/* Conflict Debate Card inside Teams */
+.pipe-card.conflict { border-color: var(--danger-rim); }
+.pipe-card.conflict .pipe-step-num { background: var(--danger-soft); color: var(--danger-ink); }
+
+/* Preset Picker Grid in Team Editor */
+.preset-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+@media (min-width: 600px) {
+  .preset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.preset-btn {
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--rim-hi);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+@media (hover: hover) {
+  .preset-btn:hover { background: var(--row-active); border-color: var(--accent-rim); }
+}
+
+/* Admin Alert Banner */
+.fb-alert-banner {
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-rim);
+  color: var(--danger-ink);
+  font-size: 12.5px;
+  margin-bottom: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
