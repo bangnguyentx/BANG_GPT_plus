@@ -1,4 +1,4 @@
-/* API AI v3.5 — Vision Fix + Slash Commands (/new /compact /plan) + Reference Image Style-Lock + Office Studio (PPTX/DOCX/XLSX/PDF) */
+/* API AI v3.6 — Vision Fix + Slash Commands (/new /compact /plan) + Reference Image Style-Lock + Office Studio (PPTX/DOCX/XLSX/PDF) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
@@ -45,10 +45,10 @@ const ICON_LOCK = `<svg width="14" height="14" fill="none" stroke="currentColor"
 let db = null;
 function openDB() {
   return new Promise((res, rej) => {
-    const req = indexedDB.open("ChatGPTProAppDB_v3", 3);
+    const req = indexedDB.open("ChatGPTProAppDB_v3", 4);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ["chats", "skills", "notebooks", "memories", "library", "kv", "teams", "tutors", "contexts", "mcp"].forEach(s => {
+      ["chats", "skills", "notebooks", "memories", "library", "kv", "teams", "tutors", "contexts", "mcp", "prompts", "journal"].forEach(s => {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: "id" });
       });
     };
@@ -78,7 +78,7 @@ let S = {
   contexts: [], activeContextId: null,
   mcpServers: [],
   pendingTask: null,
-  adminData: null, adminTab: "keys", selectedTierTab: "classic", canvasPreviewOnly: false
+  prompts: [], journal: [], adminKeyFilter: "all", adminKeyQuery: "", adminData: null, adminTab: "keys", selectedTierTab: "classic", canvasPreviewOnly: false
 };
 
 const esc = s => String(s || "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -1109,6 +1109,9 @@ function buildSystemPrompt(chat, query, hasImgs, handoffSummary = "", digestedRe
   if (officeIntent && canUseOfficeStudio()) {
     arr.push(buildOfficeSystemDirective(officeIntent));
   }
+  if (typeof window.shouldInjectTradingSignalDirective === "function" && window.shouldInjectTradingSignalDirective(query, hasImgs)) {
+    arr.push(window.TRADING_SIGNAL_DIRECTIVE);
+  }
   if (S.cfg.mcpBuiltin?.builderAssist !== false && !tutorExtraSys) {
     const busySched = (S.tutors || []).map(t => `- ${t.name} (${t.subject}): thứ ${(t.scheduleDays||[]).join(",")} lúc ${t.scheduleTime}`).join("\n") || "(Chưa có lịch nào)";
     const okMods = getAllowedRealModels().map(m => m.id).join(", ");
@@ -1252,7 +1255,11 @@ function autoFillOptimalAgentModels() {
   showToast("Đã phối model tiết kiệm & mạnh nhất theo gói của bạn");
 }
 
-async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, onToken) {
+async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, onToken, imageAtts = []) {
+  const imgs = (Array.isArray(imageAtts) ? imageAtts : []).filter(x => x && x.dataUrl);
+  const userContent = imgs.length
+    ? [{ type: "text", text: userPrompt }, ...imgs.map(im => ({ type: "image_url", image_url: { url: im.dataUrl, detail: "high" } }))]
+    : userPrompt;
   const res = await apiFetch("/ai/chat", {
     method: "POST",
     body: {
@@ -1263,7 +1270,7 @@ async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, 
       thinkingLevel: S.cfg.thinkingLevel || "high",
       messages: [
         { role: "system", content: sysPrompt },
-        { role: "user", content: userPrompt }
+        { role: "user", content: userContent }
       ],
       stream: true,
       pinnedProvider: chat.pinnedProvider,
@@ -1397,7 +1404,7 @@ async function runFourAgentPipeline(chat, userPrompt, resumeMsg = null) {
         pipe.awaitingApproval = true;
         aiMsg.streaming = false;
         S.streaming = false; S.abort = null;
-        await apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+        await dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
         renderMessages(); updateOrbButton();
         showToast("Architect đã xong · Kiểm tra bản vẽ rồi bấm Duyệt & Chạy tiếp");
         return;
@@ -1453,7 +1460,7 @@ async function runFourAgentPipeline(chat, userPrompt, resumeMsg = null) {
     if (S.activeTool && S.activeTool.startsWith("office_")) { S.activeTool = null; renderChips(); }
     aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
     bgStopTask();
-    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+    dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
     syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
   }
 }
@@ -1511,31 +1518,11 @@ async function sendPrompt(overrideText = null, opts = {}) {
   document.getElementById("slash-popup")?.classList.remove("open");
   haptic("tap");
 
-  // Handle Slash Commands (/new, /compact, /plan, /slide, /doc, /excel, /pdf, /img)
-  if (!opts.reuseLastUser && text.startsWith("/")) {
-    const spIdx = text.search(/\s/);
-    const cmd = (spIdx === -1 ? text : text.slice(0, spIdx)).toLowerCase();
-    const rest = spIdx === -1 ? "" : text.slice(spIdx + 1).trim();
-    if (cmd === "/new") {
-      if (overrideText === null) { input.value = ""; autoGrow(); }
-      startNewChat(); showToast("Đã mở phiên trò chuyện mới", "ok"); return;
-    }
-    if (cmd === "/compact") {
-      if (overrideText === null) { input.value = ""; autoGrow(); }
-      return runCompactSession();
-    }
-    const toolMap = { "/plan": "plan", "/slide": "office_pptx", "/doc": "office_docx", "/excel": "office_xlsx", "/pdf": "office_pdf", "/img": "image" };
-    if (toolMap[cmd]) {
-      S.activeTool = toolMap[cmd];
-      renderChips();
-      if (!rest) {
-        if (overrideText === null) { input.value = ""; autoGrow(); }
-        showToast(`Đã bật chế độ ${cmd} · Nhập nội dung rồi bấm Gửi`);
-        input.focus();
-        return;
-      }
-      text = rest;
-    }
+  // Handle Slash Commands via v3.6 unified dispatcher (includes /meo, /init, /plan, /compact [giữ gì], /context, /rewind, /model, /usage, /simplify, /compare, /p, /new, /slide, /doc, /excel, /pdf, /img)
+  if (!opts.reuseLastUser && text.startsWith("/") && typeof window.handleV36SlashSubmit === "function") {
+    const resSl = await window.handleV36SlashSubmit(text, overrideText === null);
+    if (resSl?.handled) return;
+    if (typeof resSl?.newText === "string") text = resSl.newText;
   }
 
   [...text.matchAll(/@([a-zA-Z0-9_-]+)/g)].forEach(m => {
@@ -1577,7 +1564,8 @@ async function sendPrompt(overrideText = null, opts = {}) {
   }
 
   if (activeTeam && !opts.forceSwitch) {
-    return runTeamPipeline(chat, activeTeam, text);
+    const teamAtts = opts.reuseLastUser ? (chat.messages.filter(x => x.role === "user").slice(-1)[0]?.atts || []) : sentAtts;
+    return runTeamPipeline(chat, activeTeam, text, null, 0, teamAtts);
   }
   const autoImgPrompt = (!activeTutor && S.activeTool === "image") ? text : (!activeTutor && !opts.forceSwitch ? detectImageIntent(text, chat) : null);
   if (autoImgPrompt) return runGenImage(chat, autoImgPrompt, sentAtts);
@@ -1691,6 +1679,7 @@ async function sendPrompt(overrideText = null, opts = {}) {
     }
     aiMsg.slot = slotLbl || "";
     const um = res.headers.get("X-Used-Model"); if (um) aiMsg.modelLabel += ` · ${um}`;
+    if (res.headers.get("X-Fallback-Used") === "1") showToast("Nguồn VIP tạm bận · Đã tự chuyển dự phòng nguồn thường", "warn");
 
     const thinkStart = Date.now();
     const appliedThink = res.headers.get("X-Thinking-Level");
@@ -1792,7 +1781,7 @@ async function sendPrompt(overrideText = null, opts = {}) {
     if (document.hidden && aiMsg.text) {
       bgNotifyDone(activeTutor ? `Gia sư ${activeTutor.name} đã trả lời` : "API AI đã trả lời xong", aiMsg.text.replace(/[#*`]/g, "").slice(0, 120));
     }
-    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+    dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
     syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
   }
 }
@@ -1903,7 +1892,7 @@ STRICT VISUAL STYLE MATCH (${refImg.name}): ${sd.digest}`;
     await saveLib("media", aiMsg.downloadName, src);
     haptic("ok"); showToast(`Đã lưu ${aiMsg.downloadName} vào Thư viện`, "ok");
   } catch (e) { aiMsg.text = `**Không thể tạo ảnh:** ${e.message}`; }
-  finally { aiMsg.streaming = false; S.streaming = false; S.activeTool = null; renderChips(); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); renderMessages(); updateOrbButton(); }
+  finally { aiMsg.streaming = false; S.streaming = false; S.activeTool = null; renderChips(); dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); renderMessages(); updateOrbButton(); }
 }
 
 /* ===== MARKDOWN & MESSAGE RENDERING ===== */
@@ -1994,6 +1983,10 @@ function renderMd(md) {
       const oCard = renderOfficeArtifactCard(b.code);
       if (oCard) { s = s.replace(`@@CB_${i}@@`, oCard); return; }
     }
+    if (b.lang.toLowerCase() === "apiai-signal" && typeof window.renderTradingSignalCard === "function") {
+      const sCard = window.renderTradingSignalCard(b.code);
+      if (sCard) { s = s.replace(`@@CB_${i}@@`, sCard); return; }
+    }
     const enc = encodeURIComponent(b.code), cid = "cb-" + (++cbSeq), canPrev = ["html", "svg"].includes(b.lang.toLowerCase());
     s = s.replace(`@@CB_${i}@@`, `<div class="code-box"><div class="code-top">
       <button type="button" class="tap" style="display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12.5px;" onclick="toggleAcc('${cid}','ch-${cid}')">
@@ -2030,7 +2023,10 @@ function renderMessages() {
           <button type="button" class="btn-p tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="saveMessageToTutorNotes('${m.suggestSaveTutorId}','${m.id}')">Lưu ngay</button>
           <button type="button" class="mini-act tap" onclick="dismissTutorSuggest('${m.id}')">${ICON_X}</button>
         </div></div>` : "";
-      return `<div class="msg-row user">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}${!S.streaming && m.text ? `<div class="user-msg-acts"><button type="button" class="mini-act tap" onclick="editUserMessage('${m.id}')" aria-label="Sửa tin nhắn">${ICON_EDIT}</button></div>` : ""}${saveBar}</div>`;
+      return `<div class="msg-row user" data-msg-id="${m.id}">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}${!S.streaming && m.text ? `<div class="user-msg-acts"><button type="button" class="mini-act tap" onclick="editUserMessage('${m.id}')" aria-label="Sửa tin nhắn">${ICON_EDIT}</button></div>` : ""}${saveBar}</div>`;
+    }
+    if (m.compare && typeof window.renderCompareMessageCard === "function") {
+      return window.renderCompareMessageCard(m);
     }
     if (m.pipeline) {
       const p = m.pipeline;
@@ -2106,10 +2102,11 @@ function renderMessages() {
       </div>
     </div>`;
     const wavy = m.streaming && !m.text ? `<div id="wv-${m.id}" class="wavy-box"><svg class="wavy-svg" viewBox="0 0 104 16"><path class="wavy-path" d="M0 8 Q6.5 1 13 8 T26 8 T39 8 T52 8 T65 8 T78 8 T91 8 T104 8"/></svg><span>Đang suy luận (${esc(THINK_LEVELS.find(x => x.id === (m.thinkingLevel || S.cfg.thinkingLevel))?.title || "Cao")})...</span></div>` : "";
-    return `<div class="msg-row assistant"><div class="ai-block">
+    return `<div class="msg-row assistant" data-msg-id="${m.id}"><div class="ai-block">
       <div class="ai-meta-line">
         <span class="ai-logo-badge"><img class="brand-mark" src="logo-mark.png" alt="" width="14" height="14" /></span>
         <span class="meta-pill">${esc(m.modelLabel || "API AI")}</span>
+        ${m.goodCheckpoint ? `<span class="checkpoint-badge">✓ Mốc tốt</span>` : ""}
         ${(S.user?.role === "admin" && m.slot) ? `<span class="meta-pill nowrap-pill">${esc(m.slot)}</span>` : ""}
       </div>
       ${renderToolStepsBlock(m)}
@@ -2139,11 +2136,14 @@ function renderMessages() {
         <button class="act-icon tap" onclick="shareMsg('${m.id}')" aria-label="Chia sẻ"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4m0-11-6.8 4"/></svg></button>
         <button class="act-icon tap" onclick="copyCodeBtn(this,getMsgText('${m.id}'))" aria-label="Sao chép"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
         <button type="button" class="act-icon tap" onclick="regenerateReply('${m.id}')" aria-label="Tạo lại"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+        <button type="button" class="act-icon tap ${m.goodCheckpoint?"bookmarked":""}" onclick="toggleMessageBookmark('${m.id}')" aria-label="Ghim mốc tốt" title="Ghim mốc tốt cho /rewind"><svg fill="${m.goodCheckpoint?"currentColor":"none"}" stroke="currentColor" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></svg></button>
+        <button type="button" class="act-icon tap" onclick="quoteReplyMessage('${m.id}')" aria-label="Trích dẫn hỏi sâu" title="Trích dẫn hỏi sâu"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1Zm12 0c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1Z"/></svg></button>
         <button class="act-icon tap" onclick="openMsgMore('${m.id}')" aria-label="Thêm"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="19" cy="12" r="1.1"/></svg></button>
       </div><button class="act-icon tap ${S.speakingMsgId===m.id?"speaking":""}" onclick="toggleSpeak('${m.id}')" aria-label="Đọc to"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></button></div>` : ""}
     </div></div>`;
   }).join("");
   typesetMathInElement(list);
+  if (typeof window.updateContextGuardBar === "function") window.updateContextGuardBar();
 }
 function getMsgText(id) { return S.chats.find(c => c.id === S.activeChatId)?.messages.find(m => m.id === id)?.text || ""; }
 function rateMsg(id, d) { haptic("tap"); const m = S.chats.find(x => x.id === S.activeChatId)?.messages.find(x => x.id === id); if (!m) return; m.feedback = m.feedback === d ? null : d; renderMessages(); }
@@ -2155,6 +2155,8 @@ function openMsgMore(id) {
     : "";
   openModal(`<h3 style="font-size:17px;font-weight:520;margin-bottom:10px;">Tùy chọn phản hồi</h3>
     <button type="button" class="s-row tap-soft" onclick="closeModal();mergeReplyIntoSharedContext('${id}')"><span>Đồng bộ vào hồ sơ boi-canh.md (GPT & Claude dùng chung)</span></button>
+    <button type="button" class="s-row tap-soft" onclick="closeModal();forkChatFromMessage('${id}')"><span>Rẽ nhánh cuộc trò chuyện từ tin nhắn này</span></button>
+    <button type="button" class="s-row tap-soft" onclick="closeModal();runSimplifyCode('${id}')"><span>Đơn giản hóa code (/simplify)</span></button>
     ${tBtn}
     <button type="button" class="s-row tap-soft" onclick="closeModal();openCanvasCode(getMsgText('${id}'),'Canvas')"><span>Mở trong Canvas</span></button>
     <button type="button" class="s-row tap-soft" onclick="closeModal();saveLib('doc','Ghi chú API AI',getMsgText('${id}'));showToast('Đã lưu Thư viện')"><span>Lưu vào Thư viện</span></button>
@@ -2179,16 +2181,18 @@ async function loadAdminData(silent = false) {
     if (!r.ok) throw new Error(data.error || "Không tải được Admin");
     S.adminData = data;
     const pCnt = (data.resetRequests || []).filter(x => x.status === "pending").length;
+    const fbCnt = (data.fallbackAlerts || []).length;
+    const totBadge = pCnt + fbCnt;
     const pill = document.getElementById("admin-pending-pill"), dot = document.getElementById("menu-badge-dot");
-    pill.style.display = pCnt ? "inline-block" : "none"; pill.textContent = String(pCnt);
-    dot.classList.toggle("show", pCnt > 0); dot.textContent = String(pCnt);
+    pill.style.display = totBadge ? "inline-block" : "none"; pill.textContent = String(totBadge);
+    dot.classList.toggle("show", totBadge > 0); dot.textContent = String(totBadge);
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
     const wv = document.getElementById("admin-worker-ver");
     if (wv) {
-      if (data.backendVersion === "3.5") {
-        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.5</span>`;
+      if (data.backendVersion === "3.6") {
+        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.6</span>`;
       } else {
-        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.5)</span>`;
+        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.6)</span>`;
       }
     }
     if (!silent) renderAdminBody();
@@ -3501,14 +3505,14 @@ async function saveSharedContext(id) {
   S.contexts = (await dbAll("contexts")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   S.activeContextId = obj.id;
   const chat = S.chats.find(c => c.id === S.activeChatId);
-  if (chat) { chat.contextId = obj.id; apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
+  if (chat) { chat.contextId = obj.id; dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
   closeModal(); renderTopContextPill(); haptic("ok"); showToast(`Đã lưu & gắn ${title}`);
 }
 function attachSharedContext(id) {
   const chat = S.chats.find(c => c.id === S.activeChatId);
   const next = (chat?.contextId || S.activeContextId) === id ? null : id;
   S.activeContextId = next;
-  if (chat) { chat.contextId = next; apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
+  if (chat) { chat.contextId = next; dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
   closeModal(); renderTopContextPill(); haptic("switch");
   showToast(next ? "Đã gắn boi-canh.md cho mọi model trong chat này" : "Đã gỡ boi-canh.md");
 }
@@ -3549,7 +3553,7 @@ async function mergeReplyIntoSharedContext(msgId, silent = false) {
     apiFetch("/sync/contexts", { method: "POST", body: ctx }).catch(() => {});
     S.contexts = (await dbAll("contexts")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.activeContextId = ctx.id;
-    if (chat) { chat.contextId = ctx.id; apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
+    if (chat) { chat.contextId = ctx.id; dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {}); }
     renderTopContextPill(); haptic("ok");
     showToast(`Đã cập nhật ${ctx.title} (${d.readerModel}) — GPT & Claude đọc chung ngay!`, "ok");
   } catch (e) { haptic("err"); showToast(e.message, "err"); }
@@ -3995,7 +3999,7 @@ async function runTeamPipeline(chat, team, userPrompt, resumeMsg = null, startAt
         aiMsg.streaming = false; S.streaming = false; S.abort = null;
         bgStopTask();
         await savePendingTask(null);
-        await apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+        await dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
         renderMessages(); updateOrbButton();
         showToast("Bước 1 đã xong · Kiểm tra rồi bấm Duyệt & Chạy tiếp");
         return;
@@ -4030,7 +4034,7 @@ async function runTeamPipeline(chat, team, userPrompt, resumeMsg = null, startAt
   } finally {
     aiMsg.streaming = false; S.streaming = false; S.abort = null; chat.updatedAt = Date.now();
     bgStopTask();
-    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+    dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
     syncAccountUI(); renderMessages(); renderMemoryBar(); updateOrbButton();
   }
 }
@@ -5170,7 +5174,7 @@ async function runCompactSession() {
     chat.compactedUpToIndex = chat.messages.length;
     chat.compactedBy = d.readerModel || "GPT 6.2 Astra";
     chat.compactedAt = Date.now();
-    apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+    dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
     renderMessages(); haptic("ok");
     showToast(`Đã nén ${chat.messages.length} tin bằng ${chat.compactedBy} · Làm tiếp ngay không cần giải thích lại!`, "ok");
   } catch (e) {
@@ -5201,7 +5205,7 @@ function clearChatCompact() {
   const chat = S.chats.find(c => c.id === S.activeChatId);
   if (!chat) return;
   delete chat.compactSummary; delete chat.compactedUpToIndex;
-  apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
+  dbPut("chats", chat).catch(() => {}); apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
   renderMessages(); showToast("Đã gỡ bản nén ngữ cảnh");
 }
 
@@ -5410,4 +5414,5 @@ function openSavedOfficeFromLib(libId) {
   } catch { showToast("Không mở được tệp đã lưu", "err"); }
 }
 
-boot();
+
+// boot() is invoked by v36-pro.js right after v3.6 modules attach!
