@@ -2107,8 +2107,8 @@ Hãy rà lại đoạn code \`${codeObj.lang}\` dưới đây: gom chỗ trùng 
 
   attachV36InputListeners();
 
-  // Boot the application now that all v3.6 hooks & overrides are cleanly installed!
-  boot().then(async () => {
+  // Expose v3.6 post-boot hook so v37-engine.js runs boot() after attaching all v3.7 modules!
+  window.__V36_POST_BOOT__ = async () => {
     await ensureStarterPrompts();
     S.journal = (await dbAll("journal")).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     restoreCurrentDraft();
@@ -2123,5 +2123,5 @@ Hãy rà lại đoạn code \`${codeObj.lang}\` dưới đây: gom chỗ trùng 
         renderSidebar(); renderMessages(); renderMemoryBar();
       }
     }
-  }).catch(err => console.error("Boot v3.6 error:", err));
+  };
 })();
