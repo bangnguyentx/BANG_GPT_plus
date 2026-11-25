@@ -1,11 +1,12 @@
-/* API AI v3.6 — Vision Fix + Slash Commands (/new /compact /plan) + Reference Image Style-Lock + Office Studio (PPTX/DOCX/XLSX/PDF) */
+/* API AI v3.7 — Vision Fix + Slash Commands (/new /compact /plan) + Reference Image Style-Lock + Office Studio (PPTX/DOCX/XLSX/PDF) */
 const META = window.__APP_META__ || { verCode: 20, verName: "2.0.20", repo: "bangnguyentx/BANG_GPT", workerUrl: "" };
 
 const THINK_LEVELS = [
   { id: "low", title: "Thấp", sub: "Phản hồi nhanh · reasoning: low", prompt: "Trả lời ngắn gọn, trực diện, không lan man." },
   { id: "medium", title: "Trung bình", sub: "Cân bằng · reasoning: medium", prompt: "Phân tích cân bằng, rõ ràng từng ý chính." },
   { id: "high", title: "Cao", sub: "Suy luận sâu · reasoning: high", prompt: "Suy luận sâu từng bước, tự kiểm tra kỹ logic trước khi kết luận." },
-  { id: "xhigh", title: "xHigh", sub: "Tư duy tối đa · reasoning: xhigh", prompt: "Tư duy chuyên sâu ở mức tối đa: phân tích đa chiều, rà soát mọi edge-case và kiểm chứng cẩn mật trước khi đưa ra đáp án cuối." }
+  { id: "xhigh", title: "xHigh", sub: "Tư duy rất sâu · reasoning: xhigh", prompt: "Tư duy chuyên sâu ở mức rất cao: phân tích đa chiều, rà soát mọi edge-case và kiểm chứng cẩn mật trước khi đưa ra đáp án cuối." },
+  { id: "max", title: "Max", sub: "Tư duy cực đại · reasoning: max (tốn nhiều token hơn)", prompt: "Tư duy ở mức CỰC ĐẠI: tự phản biện từng giả định, kiểm chứng chéo mọi số liệu/logic/ca biên khó nhất trước khi kết luận sắc bén nhất." }
 ];
 const PLAN_OPTIONS = [
   ["week", "Tuần (7 ngày)"], ["1m", "1 Tháng (30 ngày)"], ["3m", "3 Tháng (90 ngày)"],
@@ -26,6 +27,7 @@ const DEFAULT_CFG = {
   personalIntel: true, imgQuality: "hd", ultraGlass: false, haptics: true,
   blurPx: 18, glassAlpha: 0.78, wallpaper: "",
   lowPowerMotion: false,
+  modelThinkingMap: {},
   repoReaderModel: "gpt-6.2-sol",
   mcpBuiltin: { linkReader: true, webSearch: true, contextSync: true, builderAssist: true, utilities: true },
   agentCfg: {
@@ -1255,7 +1257,7 @@ function autoFillOptimalAgentModels() {
   showToast("Đã phối model tiết kiệm & mạnh nhất theo gói của bạn");
 }
 
-async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, onToken, imageAtts = []) {
+async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, onToken, imageAtts = [], signalOverride = null) {
   const imgs = (Array.isArray(imageAtts) ? imageAtts : []).filter(x => x && x.dataUrl);
   const userContent = imgs.length
     ? [{ type: "text", text: userPrompt }, ...imgs.map(im => ({ type: "image_url", image_url: { url: im.dataUrl, detail: "high" } }))]
@@ -1276,7 +1278,7 @@ async function callStatelessAgent(chat, modelId, roleId, sysPrompt, userPrompt, 
       pinnedProvider: chat.pinnedProvider,
       pinnedKeyIndex: chat.pinnedKeyIndex
     },
-    signal: S.abort.signal
+    signal: (typeof signalOverride !== "undefined" && signalOverride) ? signalOverride : (S.abort ? S.abort.signal : undefined)
   });
   if (!res.ok) {
     const ej = await res.json().catch(() => ({ error: "HTTP " + res.status }));
@@ -1636,7 +1638,7 @@ async function sendPrompt(overrideText = null, opts = {}) {
         pinnedKeyIndex: chat.pinnedKeyIndex,
         forceSwitch: Boolean(opts.forceSwitch)
       },
-      signal: S.abort.signal
+      signal: (typeof signalOverride !== "undefined" && signalOverride) ? signalOverride : (S.abort ? S.abort.signal : undefined)
     });
 
     if (!res.ok) {
@@ -2189,10 +2191,10 @@ async function loadAdminData(silent = false) {
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
     const wv = document.getElementById("admin-worker-ver");
     if (wv) {
-      if (data.backendVersion === "3.6") {
-        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.6</span>`;
+      if (data.backendVersion === "3.7") {
+        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.7</span>`;
       } else {
-        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.6)</span>`;
+        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.7)</span>`;
       }
     }
     if (!silent) renderAdminBody();
