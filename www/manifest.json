@@ -4,8 +4,8 @@
   "description": "Trò chuyện đa model GPT & Claude, Đội Agent Graph Swarm, Gia sư AI, Office Studio, Đọc ZIP & Thanh toán VietQR tự động.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#07080d",
-  "theme_color": "#07080d",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "orientation": "portrait-primary",
   "icons": [
     {
