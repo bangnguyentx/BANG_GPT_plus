@@ -2191,10 +2191,10 @@ async function loadAdminData(silent = false) {
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
     const wv = document.getElementById("admin-worker-ver");
     if (wv) {
-      if (data.backendVersion === "3.7") {
-        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v3.7</span>`;
+      if (data.backendVersion === "4.0") {
+        wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v4.0</span>`;
       } else {
-        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v3.7)</span>`;
+        wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v4.0)</span>`;
       }
     }
     if (!silent) renderAdminBody();
