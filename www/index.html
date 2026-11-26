@@ -3,18 +3,17 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#07080c" />
+<meta name="theme-color" content="#000000" />
 <title>API AI</title>
 <link rel="icon" type="image/png" href="logo.png" />
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="app.css" />
-<link rel="stylesheet" href="v40-centrix.css" />
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 </head>
-<body>
+<body data-view="chat" data-surface="oled" data-accent="cobalt">
 <div id="wallpaper"></div>
 
 <!-- 0. WEB LANDING SCREEN (Shown only on Web Browser when logged out; skipped in Android APK) -->
@@ -222,7 +221,7 @@
 
       <button type="button" class="nav-row tap-soft" onclick="startNewChat()">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-        <span>Cuộc trò chuyện mới</span>
+        <span>Đoạn chat mới</span>
       </button>
       <button type="button" class="nav-row tap-soft" onclick="switchView('tasks')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
@@ -231,26 +230,26 @@
       </button>
       <button type="button" class="nav-row tap-soft" onclick="switchView('resources')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
-        <span>Tài nguyên &amp; Thư viện</span>
+        <span>Tài nguyên</span>
       </button>
       <button type="button" class="nav-row tap-soft" onclick="switchView('agents')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span style="flex:1;">Tác nhân (Agents &amp; Gia sư)</span>
-        <span class="tag-st tier-pro_max">Pro</span>
+        <span style="flex:1;">Tác nhân</span>
+        <span class="tag-st tier-pro_max">Teams · Gia sư</span>
       </button>
       <button type="button" class="nav-row tap-soft" onclick="switchView('studio')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-        <span>Tạo nội dung (Studio)</span>
+        <span>Tạo nội dung</span>
       </button>
       <button type="button" class="nav-row tap-soft" onclick="switchView('connectors')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
-        <span style="flex:1;">Kết nối &amp; Kỹ năng</span>
+        <span style="flex:1;">Trình kết nối</span>
         <span id="sb-mcp-badge" class="tag-st tier-pro">MCP</span>
       </button>
       <button type="button" class="nav-row tap-soft" onclick="switchView('pricing')">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2 15 9l7 3-7 3-3 7-3-7-7-3 7-3Z"/></svg>
-        <span style="flex:1;">Gói dịch vụ &amp; Nạp VietQR</span>
-        <span class="tag-st st-active">QR</span>
+        <span style="flex:1;">Gói &amp; VietQR</span>
+        <span class="tag-st st-active">Nạp QR</span>
       </button>
 
       <div class="sb-sec-head">
@@ -277,14 +276,14 @@
     </div>
 
     <div class="sb-foot">
-      <div style="display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer;" onclick="openCentrixSettings()">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer;" onclick="switchView('settings')">
         <div class="avatar" id="sb-avatar">A</div>
         <div style="min-width:0;">
           <div id="sb-user-email" style="font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div>
           <div id="sb-user-plan" style="font-size:12px;color:var(--ink-3);">Chưa đăng nhập</div>
         </div>
       </div>
-      <button type="button" class="icon-btn tap" onclick="openCentrixSettings()" aria-label="Cài đặt">
+      <button type="button" class="icon-btn tap" onclick="switchView('settings')" aria-label="Cài đặt">
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.82-.33 1.7 1.7 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.51 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .33-1.82 1.7 1.7 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.51-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.82.33h.08a1.7 1.7 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51h.08a1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.33 1.82v.08a1.7 1.7 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
       </button>
     </div>
@@ -294,24 +293,27 @@
     <header id="top-bar">
       <div class="top-left">
         <button type="button" id="btn-open-menu" class="icon-btn tap" onclick="toggleSidebar(true)" aria-label="Mở menu">
-          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M4 8h16M4 16h16"/></svg>
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" viewBox="0 0 24 24"><path d="M4 7h16M4 12h12M4 17h16"/></svg>
           <span id="menu-badge-dot" class="badge-dot num"></span>
         </button>
-        <button type="button" id="btn-model-trigger" class="model-pill-btn tap" onclick="toggleModelDropdown(event)">
-          <span id="top-model-text">GPT 6.2 Sol Cao</span>
-          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
+      </div>
+      <div class="top-center">
+        <div class="seg-track mode-seg" id="mode-seg">
+          <div class="seg-thumb" id="mode-thumb"></div>
+          <button type="button" class="seg-btn active" data-mode="chat" onclick="setWorkMode('chat')">Trò chuyện</button>
+          <button type="button" class="seg-btn" data-mode="task" onclick="setWorkMode('task')">Công việc</button>
+        </div>
       </div>
       <div class="top-right">
         <button type="button" id="btn-quota-ring" class="quota-ring-btn tap" onclick="openQuotaRingPopup()" title="Số dư gói &amp; Ví">
           <svg class="quota-ring-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="var(--rim-hi)" stroke-width="2.5"/><circle id="quota-ring-arc" cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-dasharray="56.5" stroke-dashoffset="0" stroke-linecap="round"/></svg>
           <span id="quota-ring-pct">100%</span>
         </button>
-        <button type="button" class="icon-btn tap" onclick="startNewChat()" aria-label="Cuộc trò chuyện mới">
-          <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+        <button type="button" class="icon-btn tap" onclick="startNewChat()" aria-label="Đoạn chat mới">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
         <button type="button" id="btn-chat-more" class="icon-btn tap" onclick="toggleChatMore(event)" aria-label="Tùy chọn">
-          <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
         </button>
       </div>
     </header>
@@ -378,12 +380,17 @@
       <div id="chat-scroll">
         <div class="chat-col">
           <div id="empty-hero">
-            <div class="hero-logo-box lg-card">
-              <img class="brand-mark" src="logo-mark.png" alt="API AI" width="34" height="34" />
+            <div class="hero-logo-box">
+              <img class="brand-mark" src="logo-mark.png" alt="API AI" width="32" height="32" />
             </div>
             <h1 id="hero-title">Chúng ta nên bắt đầu từ đâu nhỉ?</h1>
-            <div class="status-chip lg-card">
+            <div class="status-chip">
               <span id="hero-quota-txt" class="num">API AI · Đã sẵn sàng</span>
+            </div>
+            <div class="cx-quick-grid" id="cx-hero-quick">
+              <button type="button" class="cx-quick-pill tap" onclick="cxQuickFill('Tóm tắt ngắn gọn và lập bảng hành động cho tài liệu mình sắp gửi')">Tóm tắt &amp; lập kế hoạch</button>
+              <button type="button" class="cx-quick-pill tap" onclick="cxQuickFill('/slide Tạo bài thuyết trình chuyên nghiệp gồm 8 slide về ')">Tạo Slide PowerPoint</button>
+              <button type="button" class="cx-quick-pill tap" onclick="switchView('agents')">Đội Tác nhân &amp; Gia sư</button>
             </div>
           </div>
           <div id="messages"></div>
@@ -405,68 +412,73 @@
           <div id="token-est-strip" style="display:none;justify-content:center;"></div>
           <div id="repo-cost-strip" style="display:none;justify-content:center;"></div>
 
-          <div class="composer-top-controls">
-            <div class="seg-track mode-seg lg-float" id="mode-seg">
-              <div class="seg-thumb" id="mode-thumb"></div>
-              <button type="button" class="seg-btn active" data-mode="chat" onclick="setWorkMode('chat')">Trò chuyện</button>
-              <button type="button" class="seg-btn" data-mode="task" onclick="setWorkMode('task')">Nhiệm vụ</button>
-            </div>
-            <button type="button" id="btn-mcp-quick" class="mini-toggle-pill lg-float tap" onclick="switchView('mcp')">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>
-              <span id="mcp-quick-lbl" class="num">MCP</span>
-            </button>
-            <button type="button" id="btn-skill-stack" class="mini-toggle-pill lg-float tap" onclick="toggleAcc('skill-stack-acc','chev-sk')">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              <span id="sk-stack-lbl" class="num">Skills</span>
-              <span id="chev-sk" class="chev"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-            </button>
-          </div>
-
           <div id="skill-stack-acc" class="acc-wrap">
             <div class="acc-inner"><div class="skill-stack-strip" id="skill-stack-strip"></div></div>
           </div>
 
           <div id="chips-bar"></div>
 
-          <div class="composer-pill lg-float">
-            <button type="button" id="btn-plus" class="plus-btn tap" onclick="openToolsSheet()" aria-label="Công cụ và đính kèm">
-              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-            </button>
-            <textarea id="prompt-in" rows="1" placeholder="Hỏi API AI" autocomplete="on" autocorrect="on" autocapitalize="sentences" spellcheck="true" inputmode="text"></textarea>
-            <button type="button" id="btn-mic" class="mic-btn tap" onclick="toggleVoiceDictate()" aria-label="Nhập giọng nói">
-              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-            </button>
-            <button type="button" id="btn-orb-send" class="orb-action-btn" onclick="handleOrbAction()" aria-label="Voice hoặc Gửi">
-              <svg id="ico-wave" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M5 10v4M9 7v10M13 5v14M17 8v8M21 11v2"/></svg>
-              <svg id="ico-send" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" style="display:none;"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
-              <svg id="ico-stop" width="14" height="14" fill="currentColor" viewBox="0 0 24 24" style="display:none;"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>
-            </button>
+          <div class="composer-card">
+            <textarea id="prompt-in" rows="1" placeholder="Hỏi API AI bất cứ điều gì..." autocomplete="on" autocorrect="on" autocapitalize="sentences" spellcheck="true" inputmode="text"></textarea>
+            <div class="composer-bar-bottom">
+              <div class="composer-bar-l">
+                <button type="button" id="btn-plus" class="cx-comp-btn icon-only plus-btn tap" onclick="openToolsSheet()" aria-label="Đính kèm và công cụ">
+                  <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <button type="button" id="btn-model-trigger" class="cx-comp-btn model-btn tap" onclick="toggleModelDropdown(event)">
+                  <span id="top-model-text">GPT 6.2 Sol · Cao</span>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <button type="button" id="btn-mcp-quick" class="cx-comp-btn tap" onclick="switchView('connectors')">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>
+                  <span id="mcp-quick-lbl" class="num">MCP</span>
+                </button>
+                <button type="button" id="btn-skill-stack" class="cx-comp-btn tap" onclick="toggleAcc('skill-stack-acc','chev-sk')">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                  <span id="sk-stack-lbl" class="num">Skills</span>
+                  <span id="chev-sk" class="chev"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+                </button>
+              </div>
+              <div class="composer-bar-r">
+                <button type="button" id="btn-mic" class="mic-btn tap" onclick="toggleVoiceDictate()" aria-label="Nhập giọng nói">
+                  <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                </button>
+                <button type="button" id="btn-orb-send" class="orb-action-btn" onclick="handleOrbAction()" aria-label="Voice hoặc Gửi">
+                  <svg id="ico-wave" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M5 10v4M9 7v10M13 5v14M17 8v8M21 11v2"/></svg>
+                  <svg id="ico-send" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" style="display:none;"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
+                  <svg id="ico-stop" width="13" height="13" fill="currentColor" viewBox="0 0 24 24" style="display:none;"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- VIEW 2: ADMIN -->
+    <!-- VIEW 2: ADMIN CONSOLE PRO -->
     <section id="view-admin" class="view">
       <div class="page-body">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;">
-          <div>
-            <h2 class="p-title" style="margin:0;">Quản trị Admin</h2>
-            <div style="font-size:12.5px;color:var(--ink-3);">Key 4 hạng · Email · Nguồn API · Model · <span id="admin-worker-ver" class="num">Worker</span></div>
+        <div class="cx-page-head">
+          <div class="cx-head-left">
+            <button type="button" class="cx-back-circle tap" onclick="switchView('chat')" aria-label="Quay lại"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+            <div style="min-width:0;">
+              <h2 class="cx-page-title" style="margin:0;">Quản trị Admin</h2>
+              <div style="font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Hệ thống · Key · VietQR · <span id="admin-worker-ver" class="num">Worker</span></div>
+            </div>
           </div>
-          <div style="display:flex;gap:6px;">
-            <button type="button" class="btn-s tap" onclick="loadAdminData()">Tải lại</button>
-            <button type="button" class="btn-p tap" onclick="switchView('chat')">Đóng</button>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button type="button" class="btn-s tap" style="height:36px;padding:0 13px;font-size:12.5px;" onclick="loadAdminData()">Tải lại</button>
+            <button type="button" class="btn-p tap" style="height:36px;padding:0 14px;font-size:12.5px;" onclick="switchView('chat')">Đóng</button>
           </div>
         </div>
         <div class="admin-tabs">
           <button type="button" class="admin-tab tap" data-adtab="overview" onclick="setAdminTab('overview')">Tổng quan</button>
-          <button type="button" class="admin-tab active tap" data-adtab="keys" onclick="setAdminTab('keys')">Key bản quyền</button>
-          <button type="button" class="admin-tab tap" data-adtab="tiers" onclick="setAdminTab('tiers')">Quyền 4 Hạng Key</button>
-          <button type="button" class="admin-tab tap" data-adtab="api" onclick="setAdminTab('api')">Nguồn API & Model</button>
-          <button type="button" class="admin-tab tap" data-adtab="users" onclick="setAdminTab('users')">Tài khoản Email</button>
-          <button type="button" class="admin-tab tap" data-adtab="resets" onclick="setAdminTab('resets')">Quên MK <span id="tab-rst-count" class="num"></span></button>
           <button type="button" class="admin-tab tap" data-adtab="billing" onclick="setAdminTab('billing')">VietQR &amp; Google</button>
+          <button type="button" class="admin-tab active tap" data-adtab="keys" onclick="setAdminTab('keys')">Key &amp; Voucher</button>
+          <button type="button" class="admin-tab tap" data-adtab="tiers" onclick="setAdminTab('tiers')">Quyền 4 Hạng</button>
+          <button type="button" class="admin-tab tap" data-adtab="api" onclick="setAdminTab('api')">API &amp; Model</button>
+          <button type="button" class="admin-tab tap" data-adtab="users" onclick="setAdminTab('users')">Người dùng</button>
+          <button type="button" class="admin-tab tap" data-adtab="resets" onclick="setAdminTab('resets')">Quên MK <span id="tab-rst-count" class="num"></span></button>
           <button type="button" class="admin-tab tap" data-adtab="system" onclick="setAdminTab('system')">Hệ thống</button>
         </div>
         <div id="admin-body"></div>
@@ -876,6 +888,6 @@ window.__APP_META__ = {
 <script src="v37-engine.js"></script>
 <input id="in-avatar" type="file" accept="image/*" hidden onchange="handleAvatarPick(this.files)" />
 <script src="v38-engine.js"></script>
-<script src="v40-centrix.js"></script>
+<script src="v50-centrix.js"></script>
 </body>
 </html>
