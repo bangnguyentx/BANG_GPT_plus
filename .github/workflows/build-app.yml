@@ -1,4 +1,4 @@
-name: Build & Release Android APK (API AI v3.7)
+name: Build & Release Android APK (API AI v3.8)
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
           RUN_NUM: ${{ github.run_number }}
         run: |
           mkdir -p www
-          for f in index.html app.css app.js office-studio.js skills-pack.js v36-pro.js v37-engine.js logo.png logo-mark.png; do
+          for f in index.html app.css app.js office-studio.js skills-pack.js v36-pro.js v37-engine.js v38-engine.js logo.png logo-mark.png; do
             if [ -f "$f" ] && [ ! -f "www/$f" ]; then
               cp "$f" "www/$f"
             fi
