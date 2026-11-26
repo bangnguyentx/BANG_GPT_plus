@@ -1,4 +1,4 @@
-name: Build & Release Android APK (API AI v4.0)
+name: Build & Release Android APK (API AI v5.0)
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
           RUN_NUM: ${{ github.run_number }}
         run: |
           mkdir -p www
-          for f in index.html app.css v40-centrix.css app.js office-studio.js skills-pack.js v36-pro.js v37-engine.js v38-engine.js v40-centrix.js manifest.json sw.js logo.png logo-mark.png; do
+          for f in index.html app.css app.js office-studio.js skills-pack.js v36-pro.js v37-engine.js v38-engine.js v50-centrix.js manifest.json sw.js logo.png logo-mark.png; do
             if [ -f "$f" ] && [ ! -f "www/$f" ]; then
               cp "$f" "www/$f"
             fi
@@ -527,7 +527,7 @@ jobs:
               convert www/logo.png -resize "${FG}x${FG}" "$DIR/ic_launcher_foreground.png"
             done
             mkdir -p android/app/src/main/res/values
-            printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#07080d</color>\n</resources>\n' > android/app/src/main/res/values/ic_launcher_background.xml
+            printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#000000</color>\n</resources>\n' > android/app/src/main/res/values/ic_launcher_background.xml
             echo "Da thay Icon App Android thanh cong."
           fi
 
@@ -604,7 +604,7 @@ jobs:
           if (!styles.includes("statusBarColor")) {
             styles = styles.replace(
               "</style>",
-              '    <item name="android:statusBarColor">#07080d</item>\n        <item name="android:navigationBarColor">#07080d</item>\n        <item name="android:windowBackground">#07080d</item>\n    </style>'
+              '    <item name="android:statusBarColor">#000000</item>\n        <item name="android:navigationBarColor">#000000</item>\n        <item name="android:windowBackground">#000000</item>\n    </style>'
             );
             fs.writeFileSync(sPath, styles);
           }
