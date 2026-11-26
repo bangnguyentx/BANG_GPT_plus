@@ -45,12 +45,13 @@ const ICON_CHECK = `<svg class="check-draw" width="15" height="15" fill="none" s
 const ICON_LOCK = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
 
 let db = null;
+const ALL_IDB_STORES = ["chats", "skills", "notebooks", "memories", "library", "kv", "teams", "tutors", "contexts", "mcp", "prompts", "journal", "tasks", "resources", "connectors"];
 function openDB() {
   return new Promise((res, rej) => {
-    const req = indexedDB.open("ChatGPTProAppDB_v3", 4);
+    const req = indexedDB.open("ChatGPTProAppDB_v3", 5);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ["chats", "skills", "notebooks", "memories", "library", "kv", "teams", "tutors", "contexts", "mcp", "prompts", "journal"].forEach(s => {
+      ALL_IDB_STORES.forEach(s => {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: "id" });
       });
     };
@@ -58,10 +59,33 @@ function openDB() {
     req.onerror = () => rej(req.error);
   });
 }
-const dbPut = (s, o) => new Promise((r, j) => { const tx = db.transaction(s, "readwrite"); tx.objectStore(s).put(o); tx.oncomplete = () => r(o); tx.onerror = () => j(tx.error); });
-const dbAll = s => new Promise((r, j) => { const q = db.transaction(s, "readonly").objectStore(s).getAll(); q.onsuccess = () => r(q.result || []); q.onerror = () => j(q.error); });
-const dbGet = (s, id) => new Promise((r, j) => { const q = db.transaction(s, "readonly").objectStore(s).get(id); q.onsuccess = () => r(q.result || null); q.onerror = () => j(q.error); });
-const dbDel = (s, id) => new Promise((r, j) => { const tx = db.transaction(s, "readwrite"); tx.objectStore(s).delete(id); tx.oncomplete = () => r(); tx.onerror = () => j(tx.error); });
+const _lsStoreKey = s => "apiai_fb_" + s;
+const dbPut = (s, o) => new Promise((r, j) => {
+  if (!db || !db.objectStoreNames.contains(s)) {
+    try { const arr = JSON.parse(localStorage.getItem(_lsStoreKey(s)) || "[]"); const i = arr.findIndex(x => x.id === o.id); if (i >= 0) arr[i] = o; else arr.unshift(o); localStorage.setItem(_lsStoreKey(s), JSON.stringify(arr)); } catch {}
+    return r(o);
+  }
+  const tx = db.transaction(s, "readwrite"); tx.objectStore(s).put(o); tx.oncomplete = () => r(o); tx.onerror = () => j(tx.error);
+});
+const dbAll = s => new Promise((r, j) => {
+  if (!db || !db.objectStoreNames.contains(s)) {
+    try { return r(JSON.parse(localStorage.getItem(_lsStoreKey(s)) || "[]")); } catch { return r([]); }
+  }
+  const q = db.transaction(s, "readonly").objectStore(s).getAll(); q.onsuccess = () => r(q.result || []); q.onerror = () => j(q.error);
+});
+const dbGet = (s, id) => new Promise((r, j) => {
+  if (!db || !db.objectStoreNames.contains(s)) {
+    try { const arr = JSON.parse(localStorage.getItem(_lsStoreKey(s)) || "[]"); return r(arr.find(x => x.id === id) || null); } catch { return r(null); }
+  }
+  const q = db.transaction(s, "readonly").objectStore(s).get(id); q.onsuccess = () => r(q.result || null); q.onerror = () => j(q.error);
+});
+const dbDel = (s, id) => new Promise((r, j) => {
+  if (!db || !db.objectStoreNames.contains(s)) {
+    try { const arr = JSON.parse(localStorage.getItem(_lsStoreKey(s)) || "[]").filter(x => x.id !== id); localStorage.setItem(_lsStoreKey(s), JSON.stringify(arr)); } catch {}
+    return r();
+  }
+  const tx = db.transaction(s, "readwrite"); tx.objectStore(s).delete(id); tx.oncomplete = () => r(); tx.onerror = () => j(tx.error);
+});
 
 let S = {
   cfg: { ...DEFAULT_CFG }, user: null, system: { notice: {}, maintenance: {} },
@@ -2191,7 +2215,7 @@ async function loadAdminData(silent = false) {
     const tc = document.getElementById("tab-rst-count"); if (tc) tc.textContent = pCnt ? `(${pCnt})` : "";
     const wv = document.getElementById("admin-worker-ver");
     if (wv) {
-      if (data.backendVersion === "4.0") {
+      if (Number(data.backendVersion || 0) >= 4) {
         wv.innerHTML = `<span style="color:var(--ok-ink);">Worker v4.0</span>`;
       } else {
         wv.innerHTML = `<span style="color:var(--warn-ink);">Worker cũ (cần Deploy v4.0)</span>`;
@@ -2934,39 +2958,57 @@ function setSidebarX(sb, scrim, x) {
     scrim.style.opacity = String(p);
   }
 }
+window.VIEW_RENDERERS = window.VIEW_RENDERERS || {};
 function toggleSidebar(o, initVel = 0) {
   const sb = document.getElementById("sidebar"), sc = document.getElementById("scrim");
   if (!sb) return;
-  if (window.innerWidth >= 980) { sb.style.transform = ""; return; }
+  if (window.innerWidth >= 980) {
+    sb.style.transform = "";
+    sb.classList.remove("open");
+    if (sc) { sc.classList.remove("open"); sc.style.opacity = ""; }
+    return;
+  }
+  stopSpring(sb);
+  const open = Boolean(o);
+  if (!open) {
+    closePopovers();
+    sb.classList.remove("open");
+    sb.style.transform = "";
+    if (sc) { sc.classList.remove("open"); sc.style.opacity = ""; }
+    return;
+  }
   haptic("tap");
-  const w = sb.offsetWidth || 304;
-  const fromX = activeSprings.has(sb) ? activeSprings.get(sb).pos : (sb.classList.contains("open") ? sidebarX : -w - 16);
-  if (o) { sb.classList.add("open"); sc.classList.add("open"); }
-  else closePopovers();
-  runSpring(sb, {
-    from: fromX,
-    to: o ? 0 : -w - 16,
-    velocity: initVel,
-    damping: Math.abs(initVel) > 120 ? 0.86 : 1.0,
-    response: 0.34,
-    onUpdate: x => setSidebarX(sb, sc, x),
-    onDone: () => { if (!o) { sb.classList.remove("open"); sc.classList.remove("open"); sc.style.opacity = ""; } }
-  });
+  sb.classList.add("open");
+  sb.style.transform = "translate3d(0, 0, 0)";
+  if (sc) { sc.classList.add("open"); sc.style.opacity = "1"; }
 }
-function closePopovers() { document.querySelectorAll(".popover").forEach(p => p.classList.remove("open")); document.getElementById("btn-model-trigger").classList.remove("open"); }
-function toggleModelDropdown(e) { e.stopPropagation(); haptic("tap"); const d = document.getElementById("model-dropdown"), b = document.getElementById("btn-model-trigger"), o = !d.classList.contains("open"); closePopovers(); d.classList.toggle("open", o); b.classList.toggle("open", o); }
-function toggleChatMore(e) { e.stopPropagation(); haptic("tap"); const p = document.getElementById("chat-more-popover"), o = !p.classList.contains("open"); closePopovers(); p.classList.toggle("open", o); }
+function closePopovers() { document.querySelectorAll(".popover").forEach(p => p.classList.remove("open")); document.getElementById("btn-model-trigger")?.classList.remove("open"); }
+function toggleModelDropdown(e) { e.stopPropagation(); haptic("tap"); const d = document.getElementById("model-dropdown"), b = document.getElementById("btn-model-trigger"), o = !d?.classList.contains("open"); closePopovers(); d?.classList.toggle("open", o); b?.classList.toggle("open", o); }
+function toggleChatMore(e) { e.stopPropagation(); haptic("tap"); const p = document.getElementById("chat-more-popover"), o = !p?.classList.contains("open"); closePopovers(); p?.classList.toggle("open", o); }
 function switchView(v) {
+  const target = v || "chat";
   haptic("tap");
+  closePopovers();
+  document.body.dataset.view = target;
   document.querySelectorAll(".view").forEach(x => x.classList.remove("active"));
-  document.getElementById("view-" + v)?.classList.add("active");
+  const sec = document.getElementById("view-" + target);
+  if (sec) sec.classList.add("active");
   toggleSidebar(false);
-  if (v === "customize") renderSkillsPage();
-  if (v === "library") renderLibrary();
-  if (v === "import") renderMemoriesPage();
-  if (v === "teams") renderTeamsPage();
-  if (v === "tutors") renderTutorsPage();
-  if (v === "mcp") renderMcpPage();
+  try {
+    if (window.VIEW_RENDERERS && typeof window.VIEW_RENDERERS[target] === "function") {
+      window.VIEW_RENDERERS[target]();
+      return;
+    }
+    if (target === "customize") renderSkillsPage();
+    if (target === "library") renderLibrary();
+    if (target === "import") renderMemoriesPage();
+    if (target === "teams") renderTeamsPage();
+    if (target === "tutors") renderTutorsPage();
+    if (target === "mcp") renderMcpPage();
+  } catch (err) {
+    console.error("switchView error:", target, err);
+    showToast("Lỗi mở mục " + target + ": " + (err?.message || err), "err");
+  }
 }
 
 function renderSidebar() { renderNbList(); renderChatsList(); }
@@ -3076,18 +3118,16 @@ function setSheetY(sheet, y) {
 function animateSheet(bgId, sheetId, open, initVel = 0) {
   const bg = document.getElementById(bgId), sh = document.getElementById(sheetId);
   if (!bg || !sh) return;
-  const h = sh.offsetHeight || 420;
-  const cur = sheetPos.has(sh) ? sheetPos.get(sh) : (open ? h : 0);
-  if (open) bg.classList.add("open");
-  runSpring(sh, {
-    from: cur,
-    to: open ? 0 : h + 24,
-    velocity: initVel,
-    damping: Math.abs(initVel) > 120 ? 0.84 : 1.0,
-    response: 0.34,
-    onUpdate: y => setSheetY(sh, y),
-    onDone: () => { if (!open) bg.classList.remove("open"); }
-  });
+  stopSpring(sh);
+  if (!open) {
+    bg.classList.remove("open");
+    sh.style.transform = "";
+    sheetPos.set(sh, 0);
+    return;
+  }
+  bg.classList.add("open");
+  sh.style.transform = "translate3d(0, 0, 0)";
+  sheetPos.set(sh, 0);
 }
 function openToolsSheet() { haptic("tap"); document.getElementById("btn-plus").classList.add("rotated"); animateSheet("sheet-tools-bg", "sheet-tools", true); }
 function closeToolsSheet(vel = 0) { document.getElementById("btn-plus").classList.remove("rotated"); animateSheet("sheet-tools-bg", "sheet-tools", false, vel); }
@@ -3167,7 +3207,7 @@ function bindEvents() {
       if (Math.abs(dx) > 48) window.OfficeStudio?.stepSlide(dx < 0 ? 1 : -1);
     }, { passive: true });
   }
-  document.getElementById("chat-scroll").addEventListener("scroll", () => { document.getElementById("btn-scroll-down").classList.toggle("show", !isNearBottom() && S.activeChatId !== null); }, { passive: true });
+  document.getElementById("chat-scroll")?.addEventListener("scroll", () => { document.getElementById("btn-scroll-down")?.classList.toggle("show", !isNearBottom() && S.activeChatId !== null); }, { passive: true });
   document.addEventListener("click", e => { if (!e.target.closest(".popover") && !e.target.closest("#btn-model-trigger") && !e.target.closest("#btn-chat-more")) closePopovers(); });
   window.addEventListener("resize", () => setWorkMode(S.cfg.workMode, false));
 }
