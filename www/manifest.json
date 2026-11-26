@@ -1,0 +1,23 @@
+{
+  "name": "API AI — Nền tảng AI Đa Tác Nhân & Học tập",
+  "short_name": "API AI",
+  "description": "Trò chuyện đa model GPT & Claude, Đội Agent Graph Swarm, Gia sư AI, Office Studio, Đọc ZIP & Thanh toán VietQR tự động.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#07080d",
+  "theme_color": "#07080d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo-mark.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
