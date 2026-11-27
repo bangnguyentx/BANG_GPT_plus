@@ -1,4 +1,4 @@
-name: Build & Release Android APK (API AI v5.0)
+name: Build & Release Android APK (API AI v6.0)
 
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
           RUN_NUM: ${{ github.run_number }}
         run: |
           mkdir -p www
-          for f in index.html app.css app.js office-studio.js skills-pack.js v36-pro.js v37-engine.js v38-engine.js v50-centrix.js manifest.json sw.js logo.png logo-mark.png; do
+          for f in index.html app.css app.js office-studio.js skills-pack.js v36-pro.js v37-engine.js v38-engine.js v50-centrix.js brand-icons.js v60-upgrade.js manifest.json sw.js logo.png logo-mark.png; do
             if [ -f "$f" ] && [ ! -f "www/$f" ]; then
               cp "$f" "www/$f"
             fi
@@ -467,6 +467,27 @@ jobs:
                       call.reject("Save/Open failed: " + ex.getMessage());
                   }
               }
+
+              @PluginMethod
+              public void openExternalAuth(PluginCall call) {
+                  try {
+                      String url = call.getString("url", "");
+                      if (url == null || !url.startsWith("http")) {
+                          call.reject("Invalid auth URL");
+                          return;
+                      }
+                      Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                      android.os.Bundle extras = new android.os.Bundle();
+                      extras.putBinder("android.support.customtabs.extra.SESSION", null);
+                      intent.putExtras(extras);
+                      intent.putExtra("android.support.customtabs.extra.TOOLBAR_COLOR", 0xFF000000);
+                      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                      getContext().startActivity(intent);
+                      call.resolve();
+                  } catch (Exception ex) {
+                      call.reject("Cannot open external auth: " + ex.getMessage());
+                  }
+              }
           }
           `;
           fs.writeFileSync(path.join(pkgDir, "ApiAiBackgroundPlugin.java"), pluginJava);
@@ -483,6 +504,7 @@ jobs:
                   registerPlugin(ApiAiBackgroundPlugin.class);
                   super.onCreate(savedInstanceState);
                   dispatchTutorIntent(getIntent());
+                  dispatchAuthDeepLink(getIntent());
               }
 
               @Override
@@ -490,6 +512,24 @@ jobs:
                   super.onNewIntent(intent);
                   setIntent(intent);
                   dispatchTutorIntent(intent);
+                  dispatchAuthDeepLink(intent);
+              }
+
+              private void dispatchAuthDeepLink(Intent intent) {
+                  if (intent == null || intent.getData() == null) return;
+                  android.net.Uri data = intent.getData();
+                  if ("apiai".equals(data.getScheme()) && "auth".equals(data.getHost())) {
+                      final String token = data.getQueryParameter("token");
+                      final String isNew = data.getQueryParameter("isNew");
+                      if (token != null && !token.isEmpty() && getBridge() != null && getBridge().getWebView() != null) {
+                          getBridge().getWebView().postDelayed(() -> {
+                              getBridge().getWebView().evaluateJavascript(
+                                  "window.__ON_NATIVE_GOOGLE_AUTH__ && window.__ON_NATIVE_GOOGLE_AUTH__(" + org.json.JSONObject.quote(token) + "," + ("1".equals(isNew) ? "true" : "false") + ");",
+                                  null
+                              );
+                          }, 550);
+                      }
+                  }
               }
 
               private void dispatchTutorIntent(Intent intent) {
@@ -590,6 +630,12 @@ jobs:
           }
           if (!xml.includes("usesCleartextTraffic")) {
             xml = xml.replace("<application", `<application android:usesCleartextTraffic="true"`);
+          }
+          if (!xml.includes('android:scheme="apiai"')) {
+            xml = xml.replace(
+              "</activity>",
+              `            <intent-filter>\n                <action android:name="android.intent.action.VIEW" />\n                <category android:name="android.intent.category.DEFAULT" />\n                <category android:name="android.intent.category.BROWSABLE" />\n                <data android:scheme="apiai" android:host="auth" />\n            </intent-filter>\n        </activity>`
+            );
           }
           if (!xml.includes("ApiAiKeepAliveService")) {
             xml = xml.replace(
