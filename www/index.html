@@ -22,25 +22,23 @@
     <div class="brand-row">
       <img class="brand-mark" src="logo-mark.png" alt="API AI" width="26" height="26" />
       <strong>API AI</strong>
-      <span class="tag-st tier-pro">v4.0</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <button type="button" class="btn-s tap" style="height:36px;" onclick="closeWebLandingToAuth('login')">Đăng nhập</button>
-      <button type="button" class="btn-p tap" style="height:36px;" onclick="closeWebLandingToAuth('register')">Dùng thử miễn phí</button>
+      <button type="button" class="btn-p tap" style="height:36px;" onclick="closeWebLandingToAuth('register')">Bắt đầu</button>
     </div>
   </div>
   <div class="wl-hero">
-    <span class="tag-st st-active">Đa Model GPT &amp; Claude · Web PWA + Android APK</span>
-    <h1 class="wl-h1">Một không gian duy nhất cho Trò chuyện, Tác nhân &amp; Công việc</h1>
-    <p class="wl-sub">Chạy Đội Agent đồ thị có vòng lặp tự kiểm định, Gia sư AI theo lộ trình, giải nén đọc trọn gói ZIP &amp; Office, và nâng cấp tự động qua VietQR trong 5 giây.</p>
+    <h1 class="wl-h1">Một không gian gọn gàng cho học tập, lập trình và công việc</h1>
+    <p class="wl-sub">Làm việc liền mạch với nhiều mô hình suy luận, đội tác nhân phối hợp, gia sư theo lộ trình và tài liệu dự án trên cùng một tài khoản.</p>
     <div class="wl-cta-row">
-      <button type="button" class="btn-p tap" style="height:46px;padding:0 24px;" onclick="closeWebLandingToAuth('register')">Bắt đầu dùng thử miễn phí</button>
-      <button type="button" class="btn-s tap" style="height:46px;padding:0 20px;" onclick="closeWebLandingToAuth('login')">Đăng nhập tài khoản</button>
+      <button type="button" class="btn-p tap" style="height:46px;padding:0 24px;" onclick="closeWebLandingToAuth('register')">Tạo tài khoản miễn phí</button>
+      <button type="button" class="btn-s tap" style="height:46px;padding:0 20px;" onclick="closeWebLandingToAuth('login')">Đăng nhập</button>
     </div>
     <div class="wl-grid">
-      <div class="wl-feat"><strong>Đội Tác nhân Đồ thị (Graph Swarm)</strong><span>Lead định tuyến nhánh song song, Checker chấm DONE WELL tự sửa 2 vòng, kèm Team Memory &amp; Gia sư AI.</span></div>
-      <div class="wl-feat"><strong>Đọc trọn gói ZIP, PDF &amp; Office Studio</strong><span>Giải nén 120 file trong ZIP ngay trên máy, đọc Word/Excel/PowerPoint/PDF và xuất Slide/Docx/Xlsx thật.</span></div>
-      <div class="wl-feat"><strong>Đăng nhập Google &amp; VietQR Tự động</strong><span>Tặng ngay gói Trial dùng thử, đồng bộ dữ liệu Web &amp; Android APK, thanh toán VietQR Napas 247 mở gói tức thì.</span></div>
+      <div class="wl-feat"><strong>Trò chuyện mạch dài không quên ngữ cảnh</strong><span>Tự động giữ các quyết định chốt, tên tệp và mốc chuẩn quan trọng xuyên suốt hàng chục lượt làm việc.</span></div>
+      <div class="wl-feat"><strong>Đội Tác nhân &amp; Gia sư theo lộ trình</strong><span>Phối hợp nhiều vai trò kiểm định chéo cho tác vụ khó, kèm lịch ôn tập và sổ lỗi sai cá nhân.</span></div>
+      <div class="wl-feat"><strong>Tài liệu, Canvas &amp; Trình kết nối</strong><span>Làm việc trực tiếp với ảnh, mã nguồn, tài liệu văn phòng và kết nối dịch vụ bên ngoài từ một giao diện.</span></div>
     </div>
   </div>
 </div>
@@ -246,22 +244,7 @@
         <span style="flex:1;">Trình kết nối</span>
         <span id="sb-mcp-badge" class="tag-st tier-pro">MCP</span>
       </button>
-      <button type="button" class="nav-row tap-soft" onclick="switchView('pricing')">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2 15 9l7 3-7 3-3 7-3-7-7-3 7-3Z"/></svg>
-        <span style="flex:1;">Gói &amp; VietQR</span>
-        <span class="tag-st st-active">Nạp QR</span>
-      </button>
 
-      <div class="sb-sec-head">
-        <button type="button" class="sb-sec-toggle tap" onclick="toggleAcc('nb-acc','chev-nb')">
-          <span>Sổ ghi chú</span>
-          <span id="chev-nb" class="chev rot"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-        </button>
-        <button type="button" class="mini-act tap" onclick="openNotebookModal()" aria-label="Sổ ghi chú mới">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-      </div>
-      <div id="nb-acc" class="acc-wrap open"><div class="acc-inner" id="sb-nb-list"></div></div>
 
       <div class="sb-sec-head">
         <button type="button" class="sb-sec-toggle tap" onclick="toggleAcc('chats-acc','chev-chats')">
@@ -357,22 +340,7 @@
           </button>
         </div>
 
-        <div class="mem-pill-bar lg-float">
-          <div class="mem-bar-head tap-soft" role="button" tabindex="0" onclick="toggleAcc('mem-bar-acc','chev-mem-bar')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAcc('mem-bar-acc','chev-mem-bar');}">
-            <span class="mem-bar-title">
-              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>
-              <span id="mem-bar-label" class="num">Trí nhớ đang dùng (0 mục)</span>
-            </span>
-            <span class="mem-bar-right">
-              <button type="button" id="top-ctx-pill" class="ctx-pill-btn tap" onclick="event.stopPropagation();openWorkspaceFilesModal()" title="Hồ sơ bối cảnh &amp; Tệp phòng làm việc">+ Bối cảnh</button>
-              <span id="chat-pin-badge" class="tag-quiet nowrap-pill" style="display:none;font-family:var(--font-mono);font-size:10.5px;"></span>
-              <span id="chev-mem-bar" class="chev"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-            </span>
-          </div>
-          <div id="mem-bar-acc" class="acc-wrap">
-            <div class="acc-inner"><div class="mem-bar-body" id="mem-bar-content"></div></div>
-          </div>
-        </div>
+<span id="chat-pin-badge" style="display:none;"></span>
         <div id="active-context-banner" style="display:none;flex-direction:column;gap:6px;"></div>
         <div id="tutor-exam-timer-bar" style="display:none;"></div>
       </div>
@@ -409,37 +377,23 @@
 
           <div id="tts-mini-bar" class="tts-mini-bar lg-float" style="display:none;"></div>
           <div id="context-guard-bar" style="display:none;"></div>
-          <div id="token-est-strip" style="display:none;justify-content:center;"></div>
           <div id="repo-cost-strip" style="display:none;justify-content:center;"></div>
-
-          <div id="skill-stack-acc" class="acc-wrap">
-            <div class="acc-inner"><div class="skill-stack-strip" id="skill-stack-strip"></div></div>
-          </div>
-
-          <div id="chips-bar"></div>
+          <div id="skill-stack-acc" class="acc-wrap" style="display:none;"><div class="acc-inner"><div class="skill-stack-strip" id="skill-stack-strip"></div></div></div>
 
           <div class="composer-card">
+            <div id="chips-bar" class="cx-att-strip"></div>
             <textarea id="prompt-in" rows="1" placeholder="Hỏi API AI bất cứ điều gì..." autocomplete="on" autocorrect="on" autocapitalize="sentences" spellcheck="true" inputmode="text"></textarea>
             <div class="composer-bar-bottom">
               <div class="composer-bar-l">
                 <button type="button" id="btn-plus" class="cx-comp-btn icon-only plus-btn tap" onclick="openToolsSheet()" aria-label="Đính kèm và công cụ">
                   <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
-                <button type="button" id="btn-model-trigger" class="cx-comp-btn model-btn tap" onclick="toggleModelDropdown(event)">
-                  <span id="top-model-text">GPT 6.2 Sol · Cao</span>
-                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
-                </button>
-                <button type="button" id="btn-mcp-quick" class="cx-comp-btn tap" onclick="switchView('connectors')">
-                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>
-                  <span id="mcp-quick-lbl" class="num">MCP</span>
-                </button>
-                <button type="button" id="btn-skill-stack" class="cx-comp-btn tap" onclick="toggleAcc('skill-stack-acc','chev-sk')">
-                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                  <span id="sk-stack-lbl" class="num">Skills</span>
-                  <span id="chev-sk" class="chev"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
-                </button>
               </div>
               <div class="composer-bar-r">
+                <button type="button" id="btn-model-trigger" class="cx-comp-btn model-btn tap" onclick="v60HandleModelBtnClick(event)" title="Bấm chọn model · Nhấn giữ đổi nhanh 2 model hay dùng">
+                  <span id="top-model-text">GPT 6.2 Sol</span>
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
                 <button type="button" id="btn-mic" class="mic-btn tap" onclick="toggleVoiceDictate()" aria-label="Nhập giọng nói">
                   <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
                 </button>
@@ -463,7 +417,7 @@
             <button type="button" class="cx-back-circle tap" onclick="switchView('chat')" aria-label="Quay lại"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
             <div style="min-width:0;">
               <h2 class="cx-page-title" style="margin:0;">Quản trị Admin</h2>
-              <div style="font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Hệ thống · Key · VietQR · <span id="admin-worker-ver" class="num">Worker</span></div>
+              <div style="font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Hệ thống · Key · Thanh toán · <span id="admin-worker-ver" class="num">v6.0</span></div>
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -473,7 +427,7 @@
         </div>
         <div class="admin-tabs">
           <button type="button" class="admin-tab tap" data-adtab="overview" onclick="setAdminTab('overview')">Tổng quan</button>
-          <button type="button" class="admin-tab tap" data-adtab="billing" onclick="setAdminTab('billing')">VietQR &amp; Google</button>
+          <button type="button" class="admin-tab tap" data-adtab="billing" onclick="setAdminTab('billing')">Thanh toán &amp; Tích hợp</button>
           <button type="button" class="admin-tab active tap" data-adtab="keys" onclick="setAdminTab('keys')">Key &amp; Voucher</button>
           <button type="button" class="admin-tab tap" data-adtab="tiers" onclick="setAdminTab('tiers')">Quyền 4 Hạng</button>
           <button type="button" class="admin-tab tap" data-adtab="api" onclick="setAdminTab('api')">API &amp; Model</button>
@@ -679,60 +633,54 @@
   </main>
 </div>
 
-<!-- TOOLS SHEET -->
+<!-- TOOLS SHEET (CentriX v6.0 — 3 Top Tiles + 5 Clean Rows) -->
 <div id="sheet-tools-bg" class="sheet-bg" onclick="if(event.target===this) closeToolsSheet()">
   <div id="sheet-tools" class="sheet">
     <div class="sheet-handle-area" data-drag="sheet-tools"><div class="sheet-handle"></div></div>
     <div class="sheet-body">
-      <div class="circle-strip">
-        <button type="button" class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-cam').click()">
+      <div class="v60-top-tiles">
+        <button type="button" class="v60-tile tap" onclick="closeToolsSheet(); document.getElementById('in-cam').click()">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
           <span>Camera</span>
         </button>
-        <button type="button" class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-img').click()">
+        <button type="button" class="v60-tile tap" onclick="closeToolsSheet(); document.getElementById('in-img').click()">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-          <span>Ảnh HD</span>
+          <span>Ảnh</span>
         </button>
-        <button type="button" class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-doc').click()">
+        <button type="button" class="v60-tile tap" onclick="closeToolsSheet(); document.getElementById('in-doc').click()">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          <span>Tệp / ZIP</span>
-        </button>
-        <button type="button" class="circle-tile lg-card tap" onclick="closeToolsSheet(); document.getElementById('in-vid').click()">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="15" height="14" rx="2.5"/><path d="m17 10 5-3v10l-5-3Z"/></svg>
-          <span>Video</span>
-        </button>
-        <button type="button" class="circle-tile lg-card tap" onclick="closeToolsSheet(); pasteImageFromClipboard()">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-          <span>Dán ảnh</span>
-        </button>
-        <button type="button" class="circle-tile lg-card tap" onclick="closeToolsSheet(); pickNotebookModal()">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
-          <span>Ghi chú</span>
+          <span>Tệp</span>
         </button>
       </div>
 
-      <div class="lg-card" style="padding:10px 12px;border-radius:14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <span style="font-size:13px;color:var(--ink-2);">Chất lượng ảnh</span>
-        <div style="display:flex;gap:6px;">
-          <button type="button" class="btn-s tap" style="height:30px;padding:0 10px;font-size:12px;" data-iq="fast" onclick="setImgQuality('fast')">Nhanh</button>
-          <button type="button" class="btn-s tap" style="height:30px;padding:0 10px;font-size:12px;" data-iq="hd" onclick="setImgQuality('hd')">HD 2048px</button>
-          <button type="button" class="btn-s tap" style="height:30px;padding:0 10px;font-size:12px;" data-iq="ultra" onclick="setImgQuality('ultra')">Siêu nét</button>
+      <div class="cx-group-card" style="margin:6px 0 4px;">
+        <button type="button" class="v60-sheet-row tap-soft" onclick="closeToolsSheet(); v60OpenExtensionsSheet()">
+          <span class="v60-sr-ico"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
+          <span class="v60-sr-txt"><strong>Công cụ mở rộng</strong><span>Kỹ năng, MCP, Tìm Web &amp; boi-canh.md</span></span>
+          <span class="v60-sr-chev">›</span>
+        </button>
+        <button type="button" class="v60-sheet-row tap-soft" onclick="closeToolsSheet(); v60OpenCreateContentSheet()">
+          <span class="v60-sr-ico"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m21 15-4.5-4.5L5 21"/></svg></span>
+          <span class="v60-sr-txt"><strong>Tạo nội dung</strong><span>Hình ảnh, Slide/Office, Canvas, So sánh 2 Model</span></span>
+          <span class="v60-sr-chev">›</span>
+        </button>
+        <button type="button" class="v60-sheet-row tap-soft" onclick="closeToolsSheet(); toggleModelDropdown(event)">
+          <span class="v60-sr-ico"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="v60-sr-txt"><strong>Mô hình và suy luận</strong><span id="v60-sheet-model-sub">GPT 6.2 Sol · Cao</span></span>
+          <span class="v60-sr-chev">›</span>
+        </button>
+        <button type="button" class="v60-sheet-row tap-soft" onclick="closeToolsSheet(); v60OpenChatOptionsSheet()">
+          <span class="v60-sr-ico"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></span>
+          <span class="v60-sr-txt"><strong>Tùy chọn chat</strong><span id="v60-sheet-perm-sub">Quyền công cụ &amp; Trí nhớ mạch dài</span></span>
+          <span class="v60-sr-chev">›</span>
+        </button>
+        <div class="v60-sheet-row" onclick="v60ToggleDeepThinkSwitch()" style="cursor:pointer;">
+          <span class="v60-sr-ico"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg></span>
+          <span class="v60-sr-txt"><strong>Suy nghĩ kỹ hơn</strong><span>Dùng mức suy luận cao nhất cho lượt này</span></span>
+          <div id="sw-deep-think" class="sw"></div>
         </div>
       </div>
-
-      <button type="button" class="s-row tap-soft" onclick="pickTool('image')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m21 15-4.5-4.5L5 21"/></svg><span>Tạo hình ảnh (Tùy kích thước &amp; theo mẫu)</span></span></button>
-      <button type="button" class="s-row tap-soft" onclick="closeToolsSheet(); openPromptLibraryModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h12M4 18h8"/></svg><span>Kho Prompt mẫu (Điền biến nhanh)</span></span></button>
-      <button type="button" class="s-row tap-soft" onclick="closeToolsSheet(); openCompareSetupModal()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/></svg><span>So sánh 2 Model song song</span></span></button>
-      <button type="button" class="s-row tap-soft" onclick="pickTool('canvas')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span>Canvas chạy code</span></span><span class="pill-sub">Xem trước</span></button>
-      <button type="button" class="s-row tap-soft" onclick="pickTool('web_search')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><span>Tìm kiếm Web trực tiếp</span></span><span class="pill-sub">Live</span></button>
-      <button type="button" class="s-row tap-soft" onclick="pickTool('deep_research')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></svg><span>Deep Research (Tìm nguồn thật)</span></span><span class="pill-sub">Live</span></button>
-      <button type="button" class="s-row tap-soft" onclick="closeToolsSheet(); openSharedContextManager()"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Gắn hồ sơ boi-canh.md (từ Teams)</span></span><span class="pill-sub">Sync</span></button>
-      <button type="button" class="s-row tap-soft" onclick="closeToolsSheet(); switchView('mcp')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg><span>Cấu hình Công cụ MCP</span></span><span class="pill-sub">MCP</span></button>
-      <button type="button" class="s-row tap-soft" onclick="pickTool('guided')"><span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span>Học có hướng dẫn</span></span></button>
-      <div class="s-row" onclick="togglePersonal()">
-        <span class="s-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg><span>Trí thông minh cá nhân</span></span>
-        <div id="sw-personal" class="sw on"></div>
-      </div>
+      <div id="sw-personal" class="sw on" style="display:none;"></div>
     </div>
   </div>
 </div>
@@ -888,6 +836,12 @@ window.__APP_META__ = {
 <script src="v37-engine.js"></script>
 <input id="in-avatar" type="file" accept="image/*" hidden onchange="handleAvatarPick(this.files)" />
 <script src="v38-engine.js"></script>
+<input id="in-edit-cam" type="file" accept="image/*" capture="environment" hidden onchange="v60HandleEditImages(this.files)" />
+<input id="in-edit-img" type="file" accept="image/*" multiple hidden onchange="v60HandleEditImages(this.files)" />
+<input id="in-edit-doc" type="file" accept=".zip,application/zip,application/x-zip-compressed,.txt,.md,.csv,.tsv,.json,.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.html,.htm,.css,.scss,.sql,.pine,.mq5,.yaml,.yml,.xml,.pdf,.docx,.pptx,.xlsx,.xls" multiple hidden onchange="v60HandleEditDocs(this.files)" />
+<input id="in-mcp-icon" type="file" accept="image/*" hidden onchange="v60HandleMcpIconUpload(this.files)" />
 <script src="v50-centrix.js"></script>
+<script src="brand-icons.js"></script>
+<script src="v60-upgrade.js"></script>
 </body>
 </html>
