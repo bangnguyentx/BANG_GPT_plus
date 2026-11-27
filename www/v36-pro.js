@@ -661,7 +661,7 @@ Hãy rà lại đoạn code \`${codeObj.lang}\` dưới đây: gom chỗ trùng 
     const q = m[1].toLowerCase();
     const items = [];
     (S.contexts || []).forEach(c => items.push({ kind: "ctx", id: c.id, title: c.title, sub: "Hồ sơ boi-canh.md" }));
-    (S.notebooks || []).forEach(n => items.push({ kind: "nb", id: n.id, title: n.title, sub: "Sổ ghi chú" }));
+    // Notebooks removed in v6.0
     (S.library || []).slice(0, 8).forEach(l => items.push({ kind: "lib", id: l.id, title: l.title, sub: l.type === "media" ? "Ảnh Thư viện" : "Tài liệu Thư viện" }));
 
     const hits = items.filter(it => !q || (it.title || "").toLowerCase().includes(q) || it.sub.toLowerCase().includes(q)).slice(0, 8);
