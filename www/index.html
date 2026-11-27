@@ -184,6 +184,29 @@
   </div>
 </div>
 
+<!-- 5. DEDICATED PASSWORD RESET GATE (z-index 245 — never covered by Landing or Auth Gate!) -->
+<div id="reset-pwd-gate" class="gate-screen" style="z-index:245;">
+  <div class="gate-card lg-float">
+    <div class="gate-brand">
+      <div class="gate-logo-frame">
+        <img class="brand-mark" src="logo-mark.png" alt="API AI" width="36" height="36" />
+      </div>
+      <h2 class="gate-title">Đặt lại mật khẩu mới</h2>
+      <p id="rp-gate-sub" class="gate-sub">Nhập mật khẩu mới cho tài khoản của bạn.</p>
+    </div>
+    <div>
+      <label class="f-lbl" for="rpg-n1">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+      <input id="rpg-n1" type="password" class="field" placeholder="Nhập mật khẩu mới" autocomplete="new-password" />
+    </div>
+    <div>
+      <label class="f-lbl" for="rpg-n2">Nhập lại mật khẩu mới</label>
+      <input id="rpg-n2" type="password" class="field" placeholder="Nhập lại mật khẩu mới" autocomplete="new-password" />
+    </div>
+    <button type="button" id="btn-rpg-save" class="btn-p tap" style="width:100%;margin-top:4px;" onclick="v60CommitResetGate()">Lưu mật khẩu mới</button>
+    <button type="button" class="btn-s tap" style="width:100%;" onclick="v60CloseResetGate()">Quay lại đăng nhập</button>
+  </div>
+</div>
+
 <!-- MAIN APP SHELL -->
 <div id="app">
   <div id="scrim" onclick="toggleSidebar(false)"></div>
