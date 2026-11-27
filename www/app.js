@@ -271,7 +271,11 @@ async function apiFetch(path, { method = "GET", body = null, auth = true, signal
   if (!base) throw new Error("Ứng dụng chưa có địa chỉ máy chủ. Liên hệ Admin.");
   const headers = { "Content-Type": "application/json", "X-Device-Id": S.cfg.deviceId };
   if (auth && S.cfg.token) headers["Authorization"] = `Bearer ${S.cfg.token}`;
-  return fetch(`${base}${path}`, { method, headers, body: body ? JSON.stringify(body) : null, signal });
+  const res = await fetch(`${base}${path}`, { method, headers, body: body ? JSON.stringify(body) : null, signal });
+  if (res.status === 401 && auth && S.cfg.token && path !== "/auth/change-password") {
+    if (typeof window.v60HandleSessionExpired === "function") window.v60HandleSessionExpired();
+  }
+  return res;
 }
 
 /* ===== AUTH, KEY GATE & SYSTEM NOTICE / MAINTENANCE ===== */
@@ -784,6 +788,7 @@ function buildRollingSummary(chat) {
   return msgs.slice(0, -20).map(m => `${m.role === "user" ? "U" : "A"}: ${(m.text || "").replace(/\s+/g, " ").slice(0, 90)}`).join(" | ").slice(0, 1800);
 }
 function renderMemoryBar() {
+  if (!document.getElementById("mem-bar-label")) return;
   const act = S.memories.filter(m => m.enabled !== false), rec = S.lastCrossRecalls || [];
   const chat = S.chats.find(c => c.id === S.activeChatId), roll = (chat?.messages?.length || 0) > 20;
   const total = act.length + rec.length + (roll ? 1 : 0);
@@ -810,12 +815,13 @@ function renderMemoryBar() {
 async function toggleMemItem(id) { haptic("switch"); const m = S.memories.find(x => x.id === id); if (!m) return; m.enabled = m.enabled === false ? true : false; await apiFetch("/sync/memories", { method: "POST", body: m }).catch(() => {}); renderMemoryBar(); }
 
 function renderSkillStack() {
+  if (!document.getElementById("skill-stack-strip")) return;
   document.getElementById("skill-stack-strip").innerHTML = S.skills.map(sk =>
     `<button class="sk-pill tap ${S.skillIds.includes(sk.id) ? "on" : ""}" onclick="toggleSkillPill('${sk.id}')">@${esc(sk.name)}</button>`
   ).join("");
   const cnt = S.skillIds.length;
-  document.getElementById("btn-skill-stack").classList.toggle("has-active", cnt > 0);
-  document.getElementById("sk-stack-lbl").textContent = cnt ? `Skills (${cnt})` : "Skills";
+  (document.getElementById("btn-skill-stack")?.classList||{toggle(){}}).toggle("has-active", cnt > 0);
+  (document.getElementById("sk-stack-lbl")||{}).textContent = cnt ? `Skills (${cnt})` : "Skills";
 }
 function toggleSkillPill(id) { haptic("switch"); S.skillIds = S.skillIds.includes(id) ? S.skillIds.filter(x => x !== id) : [...S.skillIds, id]; renderSkillStack(); renderRepoCostStrip(); renderChips(); }
 
@@ -3035,7 +3041,9 @@ function pinActiveChat() { if (S.activeChatId) { pinChat(S.activeChatId); showTo
 function deleteActiveChat() { if (S.activeChatId) { delChat(S.activeChatId); showToast("Đã xóa cuộc trò chuyện"); } }
 
 function renderNbList() {
-  document.getElementById("sb-nb-list").innerHTML = S.notebooks.map(nb => `<div class="chat-item ${S.activeNbId===nb.id?"active":""}" onclick="toggleNb('${nb.id}')"><span class="chat-item-title">${esc(nb.title)}</span><button class="mini-act tap" onclick="event.stopPropagation();openNotebookModal('${nb.id}')">${ICON_EDIT}</button></div>`).join("") || `<div style="padding:6px 12px;font-size:12.5px;color:var(--ink-3);">Chưa có sổ ghi chú</div>`;
+  const el = document.getElementById("sb-nb-list");
+  if (!el) return;
+  el.innerHTML = S.notebooks.map(nb => `<div class="chat-item ${S.activeNbId===nb.id?"active":""}" onclick="toggleNb('${nb.id}')"><span class="chat-item-title">${esc(nb.title)}</span><button class="mini-act tap" onclick="event.stopPropagation();openNotebookModal('${nb.id}')">${ICON_EDIT}</button></div>`).join("") || `<div style="padding:6px 12px;font-size:12.5px;color:var(--ink-3);">Chưa có sổ ghi chú</div>`;
 }
 function openNotebookModal(id = null) {
   const nb = id ? S.notebooks.find(x => x.id === id) : null;
@@ -3119,13 +3127,33 @@ function animateSheet(bgId, sheetId, open, initVel = 0) {
   const bg = document.getElementById(bgId), sh = document.getElementById(sheetId);
   if (!bg || !sh) return;
   stopSpring(sh);
+  const h = sh.offsetHeight || 420;
   if (!open) {
+    const curY = sheetPos.get(sh) || 0;
+    if (!prefersReducedMotion() && (curY > 4 || initVel > 180)) {
+      runSpring(sh, {
+        from: curY, to: h + 24, velocity: Math.max(initVel, 420), damping: 1.0, response: 0.24,
+        onUpdate: y => setSheetY(sh, y),
+        onDone: () => { bg.classList.remove("open"); sh.style.transform = ""; sheetPos.set(sh, 0); }
+      });
+      return;
+    }
     bg.classList.remove("open");
     sh.style.transform = "";
     sheetPos.set(sh, 0);
     return;
   }
   bg.classList.add("open");
+  const curY = sheetPos.get(sh) || 0;
+  if (!prefersReducedMotion() && (Math.abs(curY) > 2 || Math.abs(initVel) > 60)) {
+    // 1B momentum spring with subtle bounce (damping 0.82) when snapping back from finger drag!
+    runSpring(sh, {
+      from: curY, to: 0, velocity: initVel, damping: 0.82, response: 0.34,
+      onUpdate: y => setSheetY(sh, y),
+      onDone: () => { sh.style.transform = "translate3d(0, 0, 0)"; sheetPos.set(sh, 0); }
+    });
+    return;
+  }
   sh.style.transform = "translate3d(0, 0, 0)";
   sheetPos.set(sh, 0);
 }
@@ -4539,6 +4567,7 @@ function canUseRemoteMcp() { return S.user?.role === "admin" || ["pro_max", "ult
 function canUseWebSearch() { return S.user?.role === "admin" || ["pro", "pro_max", "ultra"].includes(S.user?.keyTier); }
 
 function renderMcpQuickBadge() {
+  if (!document.getElementById("mcp-quick-lbl")) return;
   const bOn = Object.values(S.cfg.mcpBuiltin || {}).filter(Boolean).length;
   const rOn = (S.mcpServers || []).filter(s => s.enabled !== false).length;
   const total = bOn + rOn;
