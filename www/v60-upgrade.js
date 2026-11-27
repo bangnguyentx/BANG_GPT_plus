@@ -45,18 +45,47 @@
     showToast(isNew ? "Chào mừng bạn! Đã đăng nhập Google thành công" : "Đã đăng nhập bằng Google", "ok");
   };
 
-  window.triggerGoogleSignIn = function () {
+  // Capture ?reset_token or ?auth_token IMMEDIATELY at script load (never lost to boot race!)
+  const _initParams = (() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const authToken = sp.get("auth_token") || "";
+      const isNew = sp.get("isNew") === "1";
+      const resetToken = sp.get("reset_token") || "";
+      const resetEmail = sp.get("email") || "";
+      if (resetToken) window.__SKIP_WEB_LANDING__ = true;
+      return { authToken, isNew, resetToken, resetEmail };
+    } catch { return { authToken: "", isNew: false, resetToken: "", resetEmail: "" }; }
+  })();
+
+  window.triggerGoogleSignIn = async function () {
     haptic("tap");
-    const authCfg = window.V50?.publicAuthCfg || {};
+    let authCfg = window.V50?.publicAuthCfg || {};
+    if (!(authCfg.googleClientId || "").trim()) {
+      showToast("Đang kết nối dịch vụ đăng nhập Google...");
+      try {
+        if (typeof window.loadPublicAuthConfig === "function") await window.loadPublicAuthConfig();
+        else {
+          const r = await apiFetch("/public/auth-config", { auth: false });
+          if (r.ok && window.V50) window.V50.publicAuthCfg = await r.json();
+        }
+      } catch {}
+      authCfg = window.V50?.publicAuthCfg || {};
+    }
+
     const cid = (authCfg.googleClientId || "").trim();
     const base = getApiBase();
     if (!cid) {
-      showToast("Admin chưa dán Google OAuth Client ID trong Quản trị → Thanh toán & Tích hợp", "warn");
+      showToast("Đăng nhập bằng Google hiện đang tạm bảo trì. Bạn vui lòng đăng nhập bằng Email và Mật khẩu.", "warn");
       return;
     }
 
-    // Native Android APK: Chrome Custom Tabs -> /auth/google/start -> apiai://auth Deep Link (100% Free!)
+    // Native Android APK: Chrome Custom Tabs -> /auth/google/start -> apiai://auth Deep Link
     if (isNativeApk()) {
+      if (!authCfg.googleRedirectReady) {
+        showToast("Đăng nhập Google trên ứng dụng đang được hoàn thiện. Bạn hãy đăng nhập bằng Email/Mật khẩu nhé.", "warn");
+        return;
+      }
       const startUrl = `${base}/auth/google/start?platform=apk&deviceId=${encodeURIComponent(S.cfg.deviceId || "dev-apk")}`;
       const nat = window.Capacitor?.Plugins?.ApiAiBackground;
       if (nat && typeof nat.openExternalAuth === "function") {
@@ -68,7 +97,7 @@
       return;
     }
 
-    // Web: Prefer clean server OAuth redirect when Client Secret is ready (works on iOS Safari & Brave without popup blocking!), fallback to GSI prompt
+    // Web: Prefer server redirect when configured; fallback to Google Identity popup
     if (authCfg.googleRedirectReady && base) {
       const origin = encodeURIComponent(window.location.origin);
       window.location.href = `${base}/auth/google/start?platform=web&deviceId=${encodeURIComponent(S.cfg.deviceId || "dev-web")}&origin=${origin}`;
@@ -77,29 +106,69 @@
     if (window.google?.accounts?.id) {
       try { window.google.accounts.id.prompt(); } catch {}
     } else {
-      showToast("Đang tải dịch vụ Google, thử lại sau 2 giây...", "warn");
+      showToast("Đang tải dịch vụ Google, vui lòng thử lại sau 2 giây.", "warn");
     }
   };
 
   function handleStartupUrlParams() {
     try {
-      const sp = new URLSearchParams(window.location.search);
-      const authToken = sp.get("auth_token");
-      const isNew = sp.get("isNew") === "1";
-      const resetToken = sp.get("reset_token");
-      const resetEmail = sp.get("email") || "";
-
-      if (authToken) {
+      if (_initParams.authToken) {
         history.replaceState({}, document.title, window.location.pathname);
-        window.__ON_NATIVE_GOOGLE_AUTH__(authToken, isNew);
+        window.__ON_NATIVE_GOOGLE_AUTH__(_initParams.authToken, _initParams.isNew);
+        _initParams.authToken = "";
         return;
       }
-      if (resetToken) {
+      if (_initParams.resetToken) {
         history.replaceState({}, document.title, window.location.pathname);
-        setTimeout(() => openResetPasswordConfirmModal(resetToken, resetEmail), 180);
+        window.v60OpenResetGate(_initParams.resetToken, _initParams.resetEmail);
+        _initParams.resetToken = "";
       }
     } catch {}
   }
+
+  window.v60OpenResetGate = function (token, email = "") {
+    window.__RESET_TOKEN_V60__ = token;
+    document.getElementById("web-landing")?.classList.remove("open");
+    const sub = document.getElementById("rp-gate-sub");
+    if (sub) sub.innerHTML = `Nhập mật khẩu mới cho tài khoản <b>${esc(email || "API AI")}</b>.`;
+    document.getElementById("reset-pwd-gate")?.classList.add("open");
+    setTimeout(() => document.getElementById("rpg-n1")?.focus(), 80);
+  };
+
+  window.v60CloseResetGate = function () {
+    document.getElementById("reset-pwd-gate")?.classList.remove("open");
+    showAuthGate(true);
+  };
+
+  window.v60CommitResetGate = async function () {
+    const newPassword = document.getElementById("rpg-n1")?.value || "";
+    const confirmPassword = document.getElementById("rpg-n2")?.value || "";
+    if (newPassword.length < 6) return showToast("Mật khẩu mới tối thiểu 6 ký tự", "warn");
+    if (newPassword !== confirmPassword) return showToast("Nhập lại mật khẩu không khớp", "warn");
+    const btn = document.getElementById("btn-rpg-save");
+    if (btn) { btn.disabled = true; btn.textContent = "Đang lưu..."; }
+    try {
+      const r = await apiFetch("/auth/reset-password-confirm", {
+        method: "POST", auth: false,
+        body: { token: window.__RESET_TOKEN_V60__, newPassword, confirmPassword }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Đặt lại mật khẩu thất bại");
+      document.getElementById("reset-pwd-gate")?.classList.remove("open");
+      haptic("ok");
+      showToast(d.message || "Đã đặt lại mật khẩu thành công!", "ok");
+      showAuthGate(true);
+      setTimeout(() => {
+        setAuthTab("login");
+        const em = document.getElementById("lg-email");
+        if (em && d.email) em.value = d.email;
+      }, 60);
+    } catch (e) {
+      haptic("err"); showToast(e.message, "err");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Lưu mật khẩu mới"; }
+    }
+  };
 
   /* =========================================================================
      2. PASSWORD FLOWS (GOOGLE FIRST-TIME SETUP + EMAIL-ONLY FORGOT + UNLINK GUARD + 401 HANDLER)
@@ -184,13 +253,62 @@
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Không gửi được yêu cầu");
       haptic("ok");
-      openModal(`<div style="text-align:center;padding:6px 0;">
-        <h3 style="font-size:18px;font-weight:600;margin-bottom:8px;">${data.emailed ? "Đã gửi Email đặt lại mật khẩu" : "Đã tạo liên kết đặt lại"}</h3>
-        <p style="font-size:14px;color:var(--info-ink);line-height:1.55;">${esc(data.message)}</p>
-        <button type="button" class="btn-p tap" style="width:100%;margin-top:16px;" onclick="closeModal()">Đã hiểu</button></div>`);
+      if (data.emailed) {
+        window.__OTP_RESET_EMAIL__ = email;
+        openModal(`<h3 style="font-size:17.5px;font-weight:600;margin-bottom:6px;">Kiểm tra Email của bạn</h3>
+          <p style="font-size:13px;color:var(--ink-2);line-height:1.5;margin-bottom:10px;">${esc(data.message)}</p>
+          <div style="padding:10px 12px;border-radius:14px;background:var(--surface-0);border:1px solid var(--rim);margin-bottom:8px;">
+            <div style="font-size:12px;color:var(--accent-ink);font-weight:600;margin-bottom:6px;">Hoặc nhập nhanh mã 6 số từ email ngay tại đây:</div>
+            <label class="f-lbl" style="margin-top:0;">Mã xác nhận 6 số</label>
+            <input id="otp-code-in" type="text" inputmode="numeric" maxlength="6" class="field num" style="text-align:center;letter-spacing:4px;font-weight:700;" placeholder="123456" />
+            <label class="f-lbl">Mật khẩu mới (≥ 6 ký tự)</label>
+            <input id="otp-n1" type="password" class="field" placeholder="Nhập mật khẩu mới" autocomplete="new-password" />
+            <label class="f-lbl">Nhập lại mật khẩu mới</label>
+            <input id="otp-n2" type="password" class="field" placeholder="Nhập lại mật khẩu mới" autocomplete="new-password" />
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button type="button" class="btn-s tap" onclick="closeModal()">Đóng</button>
+            <button type="button" id="btn-otp-confirm" class="btn-p tap" style="flex:1;" onclick="v60SubmitOtpReset()">Đổi mật khẩu ngay</button>
+          </div>`);
+      } else {
+        openModal(`<div style="text-align:center;padding:6px 0;">
+          <h3 style="font-size:18px;font-weight:600;margin-bottom:8px;">Đã tiếp nhận yêu cầu</h3>
+          <p style="font-size:14px;color:var(--info-ink);line-height:1.55;">${esc(data.message)}</p>
+          <button type="button" class="btn-p tap" style="width:100%;margin-top:16px;" onclick="closeModal()">Đã hiểu</button></div>`);
+      }
     } catch (e) {
       haptic("err"); showToast(e.message, "err");
       if (btn) { btn.disabled = false; btn.textContent = "Gửi liên kết đặt lại"; }
+    }
+  };
+
+  window.v60SubmitOtpReset = async function () {
+    const otpCode = (document.getElementById("otp-code-in")?.value || "").trim();
+    const newPassword = document.getElementById("otp-n1")?.value || "";
+    const confirmPassword = document.getElementById("otp-n2")?.value || "";
+    if (!/^\d{6}$/.test(otpCode)) return showToast("Nhập đúng mã xác nhận gồm 6 chữ số trong email", "warn");
+    if (newPassword.length < 6) return showToast("Mật khẩu mới tối thiểu 6 ký tự", "warn");
+    if (newPassword !== confirmPassword) return showToast("Nhập lại mật khẩu không khớp", "warn");
+    const btn = document.getElementById("btn-otp-confirm");
+    if (btn) { btn.disabled = true; btn.textContent = "Đang xác nhận..."; }
+    try {
+      const r = await apiFetch("/auth/reset-password-confirm", {
+        method: "POST", auth: false,
+        body: { email: window.__OTP_RESET_EMAIL__ || "", otpCode, newPassword, confirmPassword }
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Mã xác nhận không đúng hoặc đã hết hạn");
+      closeModal(); haptic("ok");
+      showToast(d.message || "Đã đổi mật khẩu thành công!", "ok");
+      showAuthGate(true);
+      setTimeout(() => {
+        setAuthTab("login");
+        const em = document.getElementById("lg-email");
+        if (em && d.email) em.value = d.email;
+      }, 60);
+    } catch (e) {
+      haptic("err"); showToast(e.message, "err");
+      if (btn) { btn.disabled = false; btn.textContent = "Đổi mật khẩu ngay"; }
     }
   };
 
@@ -365,11 +483,18 @@
       ${holDaysLeft ? `<span class="tag-st st-pending num">Còn ${holDaysLeft} ngày</span>` : ""}
     </div>` : "";
 
+    const fmtTokShort = n => {
+      const num = Number(n || 0);
+      if (num >= 1000000) return (num / 1000000).toFixed(num % 1000000 === 0 ? 0 : 1) + "M";
+      if (num >= 1000) return Math.round(num / 1000) + "K";
+      return String(num);
+    };
+    const byId = Object.fromEntries(plans.map(x => [x.id, x]));
     const recLabels = {
-      1: { name: "Nhẹ nhàng (~15 tin/ngày)", tier: "Classic", note: "Học tập cơ bản, hỏi đáp nhanh hằng ngày." },
-      2: { name: "Làm việc đều (~100 tin + Ảnh/Office)", tier: "Pro", note: "Lập trình, giải bài, tạo Slide/Word/Excel mượt." },
-      3: { name: "Chuyên sâu (Claude + Đội Tác nhân & Gia sư)", tier: "Pro Max", note: "Mở khóa Claude Sonnet 5, Opus 5.5, Teams & Gia sư AI." },
-      4: { name: "Cường độ cao (5M token + Fable 5.1)", tier: "Ultra", note: "Không giới hạn lượt tin, tối đa 5 thiết bị, ưu tiên cao nhất." }
+      1: { name: `Nhẹ nhàng (${byId.classic?.dailyMsgs < 0 ? "Vô hạn" : (byId.classic?.dailyMsgs ?? 25)} tin · ${fmtTokShort(byId.classic?.dailyTokens ?? 35000)} tok/ngày)`, tier: byId.classic?.label || "Classic", note: `Học tập cơ bản, hỏi đáp nhanh (${(byId.classic?.models || ["GPT 6 Luna"]).slice(0, 2).join(", ")}).` },
+      2: { name: `Làm việc đều (${byId.pro?.dailyMsgs < 0 ? "Vô hạn" : (byId.pro?.dailyMsgs ?? 180)} tin · ${fmtTokShort(byId.pro?.dailyTokens ?? 350000)} tok/ngày)`, tier: byId.pro?.label || "Pro", note: `Lập trình, giải bài${byId.pro?.allowOffice !== false ? ", Office Studio" : ""}${byId.pro?.allowImage !== false ? " & Tạo ảnh HD" : ""}.` },
+      3: { name: `Chuyên sâu (${byId.pro_max?.dailyMsgs < 0 ? "Vô hạn" : (byId.pro_max?.dailyMsgs ?? 500)} tin · ${fmtTokShort(byId.pro_max?.dailyTokens ?? 1200000)} tok/ngày)`, tier: byId.pro_max?.label || "Pro Max", note: `Mở khóa Đội Tác nhân, Gia sư AI${byId.pro_max?.allowGithub ? ", GitHub Repo" : ""} & ${(byId.pro_max?.models || []).slice(-2).join(", ")}.` },
+      4: { name: `Cường độ cao (${byId.ultra?.dailyMsgs < 0 ? "Vô hạn" : (byId.ultra?.dailyMsgs ?? 2000)} tin · ${fmtTokShort(byId.ultra?.dailyTokens ?? 5000000)} tok/ngày)`, tier: byId.ultra?.label || "Ultra", note: `Dung lượng tối đa trên ${byId.ultra?.maxDevices ?? 5} thiết bị, mở toàn bộ mô hình cao cấp nhất.` }
     };
     const curRec = recLabels[V60.recLevel] || recLabels[2];
 
@@ -470,16 +595,48 @@
       ${ctaHtml}
 
       <div class="cx-group-card" style="padding:12px 14px;">
-        <strong style="font-size:13.5px;display:block;margin-bottom:8px;">So sánh quyền lợi 4 hạng</strong>
+        <strong style="font-size:13.5px;display:block;margin-bottom:8px;">So sánh quyền lợi 4 hạng (cập nhật trực tiếp)</strong>
         <div style="overflow-x:auto;">
           <table class="v60-compare-table">
-            <thead><tr><th>Quyền lợi</th><th>Classic</th><th>Pro</th><th>Pro Max</th><th>Ultra</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Quyền lợi</th>
+                ${plans.map(pl => `<th class="${pl.id === p.id ? "col-active" : ""}">${esc(pl.label)}</th>`).join("")}
+              </tr>
+            </thead>
             <tbody>
-              <tr><td>Token / ngày</td><td class="num">35K</td><td class="num">350K</td><td class="num">1.2M</td><td class="num">5M</td></tr>
-              <tr><td>Lượt tin / ngày</td><td class="num">25</td><td class="num">180</td><td class="num">500</td><td>Vô hạn</td></tr>
-              <tr><td>Models</td><td>Luna</td><td>Full GPT</td><td>+ Sonnet/Opus</td><td>+ Fable 5.1</td></tr>
-              <tr><td>Teams &amp; Gia sư</td><td>—</td><td>—</td><td style="color:var(--ok-ink);">Mở khóa</td><td style="color:var(--ok-ink);">Mở khóa</td></tr>
-              <tr><td>Thiết bị</td><td class="num">1</td><td class="num">2</td><td class="num">3</td><td class="num">5</td></tr>
+              <tr>
+                <td>Giá 1 tháng</td>
+                ${plans.map(pl => `<td class="num ${pl.id === p.id ? "col-active" : ""}">${fmtVnd(pl.price1m)}</td>`).join("")}
+              </tr>
+              <tr>
+                <td>Token / ngày</td>
+                ${plans.map(pl => `<td class="num ${pl.id === p.id ? "col-active" : ""}">${fmtTokShort(pl.dailyTokens)}</td>`).join("")}
+              </tr>
+              <tr>
+                <td>Lượt tin / ngày</td>
+                ${plans.map(pl => `<td class="num ${pl.id === p.id ? "col-active" : ""}">${Number(pl.dailyMsgs) < 0 ? "Vô hạn" : Number(pl.dailyMsgs || 0).toLocaleString("vi-VN")}</td>`).join("")}
+              </tr>
+              <tr>
+                <td>Mô hình mở khóa</td>
+                ${plans.map(pl => `<td class="${pl.id === p.id ? "col-active" : ""}" style="font-size:11.5px;line-height:1.4;">${esc((pl.models || []).join(", ") || "Cơ bản")}</td>`).join("")}
+              </tr>
+              <tr>
+                <td>Đội Tác nhân &amp; Gia sư</td>
+                ${plans.map(pl => `<td class="${pl.id === p.id ? "col-active" : ""}" style="${pl.allowTeams ? "color:var(--ok-ink);" : "color:var(--ink-3);"}">${pl.allowTeams ? "Có" : "—"}</td>`).join("")}
+              </tr>
+              <tr>
+                <td>Office Studio &amp; Ảnh HD</td>
+                ${plans.map(pl => `<td class="${pl.id === p.id ? "col-active" : ""}" style="${(pl.allowOffice || pl.allowImage) ? "color:var(--ok-ink);" : "color:var(--ink-3);"}">${pl.allowOffice && pl.allowImage ? "Đầy đủ" : (pl.allowOffice ? "Office" : (pl.allowImage ? "Tạo ảnh" : "—"))}</td>`).join("")}
+              </tr>
+              <tr>
+                <td>Deep Research &amp; GitHub</td>
+                ${plans.map(pl => `<td class="${pl.id === p.id ? "col-active" : ""}" style="${(pl.allowDeepResearch || pl.allowGithub) ? "color:var(--ok-ink);" : "color:var(--ink-3);"}">${pl.allowDeepResearch && pl.allowGithub ? "Đầy đủ" : (pl.allowDeepResearch ? "Research" : (pl.allowGithub ? "GitHub" : "—"))}</td>`).join("")}
+              </tr>
+              <tr>
+                <td>Thiết bị tối đa</td>
+                ${plans.map(pl => `<td class="num ${pl.id === p.id ? "col-active" : ""}">${Number(pl.maxDevices || 1)} máy</td>`).join("")}
+              </tr>
             </tbody>
           </table>
         </div>
@@ -674,7 +831,7 @@
       const r = await apiFetch("/connectors/oauth/init", { method: "POST", body: { appId: id, redirectUrl } });
       const d = await r.json();
       if (!d.ok) {
-        showToast(d.error || "Chưa bật Composio OAuth — chuyển sang tab Nâng cao (URL MCP)", "warn");
+        showToast(d.error || "Kết nối 1 chạm đang được cập nhật. Bạn có thể dùng URL MCP ở mục nâng cao bên dưới.", "warn");
         const adv = document.getElementById("cn-adv-panel");
         if (adv) adv.style.display = "block";
         if (btn) { btn.disabled = false; btn.textContent = "Tiếp tục cấp quyền 1 chạm"; }
@@ -715,7 +872,7 @@
 
       <div class="card-item" style="padding:12px;background:var(--surface-0);margin-bottom:10px;">
         <strong style="font-size:13.5px;display:block;margin-bottom:4px;">Kết nối 1 chạm (OAuth)</strong>
-        <div style="font-size:12px;color:var(--ink-2);line-height:1.45;margin-bottom:10px;">Cho phép API AI truy cập an toàn vào ${esc(meta.name)} theo tài khoản của bạn${composioReady ? " (Composio sẵn sàng)" : " (yêu cầu Admin bật Composio Key hoặc dùng tab URL MCP bên dưới)"}.</div>
+        <div style="font-size:12px;color:var(--ink-2);line-height:1.45;margin-bottom:10px;">Cho phép API AI truy cập an toàn vào ${esc(meta.name)} theo tài khoản của bạn${composioReady ? " chỉ với 1 chạm." : " hoặc cấu hình bằng URL MCP ở mục nâng cao bên dưới."}</div>
         <button type="button" id="btn-comp-oauth" class="btn-p tap" style="width:100%;height:42px;" onclick="v60StartComposioOAuth('${id}')">Tiếp tục cấp quyền 1 chạm</button>
       </div>
 
@@ -1376,6 +1533,7 @@
             <span style="font-size:11px;font-family:var(--font-mono);flex:1;overflow:hidden;text-overflow:ellipsis;">${esc(base)}/auth/google/callback</span>
             <button type="button" class="ws-chip-btn tap" onclick="copyText('${esc(base)}/auth/google/callback','Đã copy Redirect URI')">Copy URI</button>
           </div>
+          <div style="font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.45;">Gắn chính xác URI trên vào <b>Google Cloud Console → Clients → Chọn Web Client → URI de redirection autorisés → Lưu</b> (tránh lỗi 400 redirect_uri_mismatch).</div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
             <div><label class="f-lbl">Nhà cung cấp Email miễn phí</label>
@@ -1598,11 +1756,12 @@
     setTimeout(runAll, 450);
   }
 
+  if (_initParams.resetToken) handleStartupUrlParams();
   setTimeout(() => {
     bindModelQuickSwapLongPress();
     attachSegmentedResizeFix();
     handleStartupUrlParams();
     v60SyncSheetLabels();
     window.renderModelDropdown();
-  }, 420);
+  }, 380);
 })();
