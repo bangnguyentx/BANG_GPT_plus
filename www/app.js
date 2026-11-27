@@ -2924,8 +2924,15 @@ function setWorkMode(mode, anim = true) {
   const h = document.getElementById("hero-title");
   const activeTeam = S.activeTeamId ? S.teams.find(t => t.id === S.activeTeamId) : null;
   const activeTutor = S.activeTutorId ? S.tutors.find(t => t.id === S.activeTutorId) : null;
+  let defaultChatTxt = "Chúng ta nên bắt đầu từ đâu nhỉ?";
+  if (S.user) {
+    const hr = new Date().getHours();
+    const greet = hr < 11 ? "Chào buổi sáng" : (hr < 14 ? "Chào buổi trưa" : (hr < 18 ? "Chào buổi chiều" : "Chào buổi tối"));
+    const fullName = (S.user.name || S.user.email.split("@")[0]).trim();
+    defaultChatTxt = `${greet}, ${fullName}.`;
+  }
   const txt = activeTeam ? `Đội ngũ ${activeTeam.name} đã sẵn sàng`
-    : (activeTutor ? `Gia sư ${activeTutor.name} (${activeTutor.subject})` : (mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : "Chúng ta nên bắt đầu từ đâu nhỉ?"));
+    : (activeTutor ? `Gia sư ${activeTutor.name} (${activeTutor.subject})` : (mode === "task" ? "Tôi có thể bắt đầu việc gì cho bạn?" : defaultChatTxt));
   if (anim) { h.style.opacity = "0"; setTimeout(() => { h.textContent = txt; h.style.opacity = "1"; }, 120); } else h.textContent = txt;
   document.getElementById("prompt-in").placeholder = activeTeam ? `Giao việc cho ${activeTeam.name}...`
     : (activeTutor ? `Hỏi Gia sư ${activeTutor.subject}...` : (mode === "task" ? "Mô tả tác vụ" : "Hỏi API AI"));
@@ -3481,7 +3488,7 @@ async function openPlanComparisonModal() {
       <button type="button" class="btn-contact tap" style="flex:1;" onclick="openSupportContact('zalo')">Nhắn Zalo</button>
       <button type="button" class="btn-p tap" onclick="closeModal()">Đóng</button>
     </div>`);
-  if (!cachedPublicPlans) await loadPublicPlansMeta();
+  await loadPublicPlansMeta();
   const el = document.getElementById("plan-cmp-body");
   if (!el) return;
   const tiers = cachedPublicPlans?.tiers || [];
