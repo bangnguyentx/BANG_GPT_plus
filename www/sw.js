@@ -1,4 +1,4 @@
-const CACHE_NAME = 'apiai-v60-shell-v1';
+const CACHE_NAME = 'apiai-v61-shell-v1';
 const ASSETS = ['./', './index.html', './app.css', './app.js', './office-studio.js', './skills-pack.js', './v36-pro.js', './v37-engine.js', './v38-engine.js', './v50-centrix.js', './brand-icons.js', './v60-upgrade.js', './logo.png', './logo-mark.png', './manifest.json'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)).catch(() => {}));
