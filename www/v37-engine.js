@@ -733,20 +733,9 @@
     try {
       const preFlightContext = await runPreFlightToolsAndMcp(aiMsg, text, chosenUi);
       const fullSysPrompt = preFlightContext ? `${sysPrompt}\n\n${preFlightContext}` : sysPrompt;
-      const msgs = [{ role: "system", content: fullSysPrompt }];
-      const startIdx = Number.isInteger(chat.compactedUpToIndex) ? Math.max(0, chat.compactedUpToIndex) : 0;
-      const msgSlice = chat.messages.slice(startIdx).filter(x => x.id !== aiMsg.id && !x.failedSwitch).slice(-20);
-      for (const m of msgSlice) {
-        if (m.role === "assistant") { msgs.push({ role: "assistant", content: m.text || "" }); continue; }
-        const imgs = (m.atts || []).filter(a => a.dataUrl), docs = (m.atts || []).filter(a => a.type === "file");
-        let txt = m.text || "";
-        if (docs.length) txt += "\n\n" + docs.map(d => `[TỆP ${d.name}]\n${d.text}`).join("\n\n");
-        if (imgs.length) {
-          const arr = [{ type: "text", text: txt || "Phân tích chi tiết toàn bộ hình ảnh này." }];
-          imgs.forEach(im => arr.push({ type: "image_url", image_url: { url: im.dataUrl, detail: "high" } }));
-          msgs.push({ role: "user", content: arr });
-        } else msgs.push({ role: "user", content: txt });
-      }
+      const msgs = typeof window.v60BuildAntiAmnesiaPayload === "function"
+        ? window.v60BuildAntiAmnesiaPayload(chat, aiMsg, fullSysPrompt, text)
+        : [{ role: "system", content: fullSysPrompt }];
 
       const res = await apiFetch("/ai/chat", {
         method: "POST",
@@ -890,6 +879,9 @@
       dbPut("chats", chat).catch(() => {});
       apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
       syncAccountUI();
+      if (typeof window.v60MaybeUpdateRollingMemory === "function" && aiMsg.text && !aiMsg.text.startsWith("**Thông báo:**")) {
+        window.v60MaybeUpdateRollingMemory(chat);
+      }
       if (S.activeChatId === chatId) {
         renderMessages();
         typesetSingleMsgMath(aiMsg.id);
@@ -1100,6 +1092,9 @@
       dbPut("chats", chat).catch(() => {});
       apiFetch("/sync/chats", { method: "POST", body: chat }).catch(() => {});
       syncAccountUI();
+      if (typeof window.v60MaybeUpdateRollingMemory === "function" && aiMsg.text && !aiMsg.text.startsWith("**Thông báo:**")) {
+        window.v60MaybeUpdateRollingMemory(chat);
+      }
       if (S.activeChatId === chatId) {
         renderMessages();
         typesetSingleMsgMath(aiMsg.id);
@@ -1558,15 +1553,28 @@
 
     list.innerHTML = compactHtml + resumeHtml + tutorCardHtml + olderBtn + visibleMsgs.map(m => {
       if (m.role === "user") {
-        const thumbs = (m.atts || []).filter(a => a.dataUrl).map(a => `<img class="user-thumb-img" src="${a.dataUrl}" onclick="openLightbox('${a.dataUrl}')" />`).join("");
-        const docs = (m.atts || []).filter(a => a.type === "file").map(a => `<span class="cite-pill">${esc(a.name)}</span>`).join("");
+        if (window.V60?.editingMsgId === m.id && typeof window.v60RenderInlineEditCard === "function") {
+          return window.v60RenderInlineEditCard(m);
+        }
+        const imgAtts = (m.atts || []).filter(a => a.dataUrl);
+        const docAtts = (m.atts || []).filter(a => a.type === "file" || a.type === "zip_archive");
+        const thumbs = imgAtts.length
+          ? `<div class="v60-msg-grid ${imgAtts.length === 1 ? "cnt-1" : "cnt-multi"}">${imgAtts.map(a => `<img class="v60-msg-photo" src="${a.dataUrl}" alt="${esc(a.name || "Ảnh")}" onclick="openLightbox('${a.dataUrl}','${esc(a.name || "image.png")}')" />`).join("")}</div>`
+          : "";
+        const docs = docAtts.length
+          ? `<div class="v60-msg-files">${docAtts.map(a => {
+              const ext = (a.name || "FILE").split(".").pop().toUpperCase().slice(0, 4);
+              const kb = a.size ? `${Math.max(1, Math.round(a.size / 1024))} KB` : (a.text ? `${Math.max(1, Math.round(a.text.length / 1024))} KB` : "");
+              return `<span class="v60-msg-file"><span class="v60-msg-file-ext">${esc(ext)}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.name)}</span>${kb ? `<span style="font-size:10.5px;color:var(--ink-3);font-family:var(--font-mono);flex-shrink:0;">${kb}</span>` : ""}</span>`;
+            }).join("")}</div>`
+          : "";
         const saveBar = m.suggestSaveTutorId ? `<div class="tutor-auto-save-bar">
           <span>Phát hiện kiến thức mới trên lớp — lưu vào Kho Gia sư?</span>
           <div style="display:flex;gap:6px;">
             <button type="button" class="btn-p tap" style="height:28px;padding:0 10px;font-size:11.5px;" onclick="saveMessageToTutorNotes('${m.suggestSaveTutorId}','${m.id}')">Lưu ngay</button>
             <button type="button" class="mini-act tap" onclick="dismissTutorSuggest('${m.id}')">${ICON_X}</button>
           </div></div>` : "";
-        return `<div class="msg-row user" data-msg-id="${m.id}">${thumbs ? `<div class="user-thumbs">${thumbs}</div>` : ""}${docs ? `<div class="user-thumbs">${docs}</div>` : ""}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}${!window.getCurrentChatRun() && m.text ? `<div class="user-msg-acts"><button type="button" class="mini-act tap" onclick="editUserMessage('${m.id}')" aria-label="Sửa tin nhắn">${ICON_EDIT}</button></div>` : ""}${saveBar}</div>`;
+        return `<div class="msg-row user" data-msg-id="${m.id}">${thumbs}${docs}${m.text ? `<div class="user-bubble lg-card">${esc(m.text)}</div>` : ""}${!window.getCurrentChatRun() ? `<div class="user-msg-acts"><button type="button" class="mini-act tap ${m.goodCheckpoint ? "pinned" : ""}" onclick="toggleMessageBookmark('${m.id}')" title="Ghim làm Mốc chuẩn (Anti-Amnesia)"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 1 1-1h1V3H7v2h1a1 1 0 0 1 1 1Z"/></svg></button><button type="button" class="mini-act tap" onclick="editUserMessage('${m.id}')" aria-label="Sửa tin nhắn">${ICON_EDIT}</button></div>` : ""}${saveBar}</div>`;
       }
       if (m.compare && typeof window.renderCompareMessageCard === "function") {
         return window.renderCompareMessageCard(m);
