@@ -1369,7 +1369,7 @@
         </div>
 
         <div class="card-item">
-          <strong style="font-size:15px;display:block;margin-bottom:6px;">Google OAuth APK &amp; Email Quên mật khẩu (Resend / Brevo)</strong>
+          <strong style="font-size:15px;display:block;margin-bottom:6px;">Google OAuth APK &amp; Email Quên mật khẩu (Gmail GAS / Resend / Brevo)</strong>
           <label class="f-lbl">Google OAuth Client Secret (Bắt buộc cho Google trên Android APK)</label>
           <input id="ab-gsec" type="password" class="field" style="font-family:var(--font-mono);font-size:12.5px;" value="${esc(go.client_secret || "")}" placeholder="GOCSPX-..." />
           <div class="mem-chip-row" style="margin-top:6px;">
@@ -1379,15 +1379,16 @@
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
             <div><label class="f-lbl">Nhà cung cấp Email miễn phí</label>
-              <select id="ae-prov" class="field">
-                <option value="resend" ${ec.provider !== "brevo" ? "selected" : ""}>Resend (3.000 mail/tháng)</option>
+              <select id="ae-prov" class="field" onchange="v60OnEmailProvChange(this.value)">
+                <option value="gas" ${ec.provider === "gas" ? "selected" : ""}>Google Apps Script (Gmail miễn phí)</option>
+                <option value="resend" ${(!ec.provider || ec.provider === "resend") ? "selected" : ""}>Resend (3.000 mail/tháng)</option>
                 <option value="brevo" ${ec.provider === "brevo" ? "selected" : ""}>Brevo (300 mail/ngày)</option>
               </select>
             </div>
-            <div><label class="f-lbl">Email API Key</label><input id="ae-key" type="password" class="field" value="${esc(ec.api_key || "")}" placeholder="re_... hoặc xkeysib-..." /></div>
+            <div><label id="ae-key-lbl" class="f-lbl">${ec.provider === "gas" ? "Web App URL (/exec) hoặc ID" : "Email API Key"}</label><input id="ae-key" type="${ec.provider === "gas" ? "text" : "password"}" class="field" value="${esc(ec.api_key || "")}" placeholder="${ec.provider === "gas" ? "https://script.google.com/macros/s/.../exec" : "re_... hoặc xkeysib-..."}" /></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div><label class="f-lbl">From Email</label><input id="ae-from" class="field" value="${esc(ec.from_email || "API AI <onboarding@resend.dev>")}" /></div>
+            <div><label id="ae-from-lbl" class="f-lbl">${ec.provider === "gas" ? "Tên người gửi" : "From Email"}</label><input id="ae-from" class="field" value="${esc(ec.from_email || (ec.provider === "gas" ? "API AI" : "API AI <onboarding@resend.dev>"))}" /></div>
             <div><label class="f-lbl">Web Base URL (Pages)</label><input id="ae-web" class="field" value="${esc(ec.web_base_url || window.location.origin)}" placeholder="https://bang-gpt-plus.pages.dev" /></div>
           </div>
           <button type="button" id="btn-test-email" class="btn-s tap" style="width:100%;margin-top:8px;" onclick="v60AdminTestEmail()">Gửi thử email kiểm tra về Admin</button>
@@ -1502,6 +1503,21 @@
   };
   // Point original save button to save all v6 fields cleanly too
   window.adminSaveBillingAndGoogle = window.v60AdminSaveAllV6;
+
+  window.v60OnEmailProvChange = function (prov) {
+    const isGas = prov === "gas";
+    const kLbl = document.getElementById("ae-key-lbl");
+    const kInp = document.getElementById("ae-key");
+    const fLbl = document.getElementById("ae-from-lbl");
+    const fInp = document.getElementById("ae-from");
+    if (kLbl) kLbl.textContent = isGas ? "Web App URL (/exec) hoặc ID" : "Email API Key";
+    if (kInp) {
+      kInp.type = isGas ? "text" : "password";
+      kInp.placeholder = isGas ? "https://script.google.com/macros/s/.../exec" : "re_... hoặc xkeysib-...";
+    }
+    if (fLbl) fLbl.textContent = isGas ? "Tên người gửi" : "From Email";
+    if (fInp && isGas && fInp.value.includes("resend.dev")) fInp.value = "API AI";
+  };
 
   window.v60AdminTestEmail = async function () {
     const btn = document.getElementById("btn-test-email");
