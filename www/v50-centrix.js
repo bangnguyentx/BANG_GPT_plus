@@ -368,7 +368,7 @@
     if (arcEl) {
       const circ = 56.5;
       arcEl.setAttribute("stroke-dashoffset", String(circ - (circ * pct) / 100));
-      arcEl.setAttribute("stroke", pct <= 15 ? "var(--danger)" : (pct <= 35 ? "var(--warn)" : "var(--accent)"));
+      arcEl.setAttribute("stroke", pct < 15 ? "var(--danger)" : (pct <= 40 ? "var(--warn)" : "var(--ok)"));
     }
 
     const av = document.getElementById("sb-avatar");
@@ -382,12 +382,14 @@
       if (em) em.textContent = S.user.name || S.user.email;
     }
 
+    const quickGrid = document.getElementById("cx-hero-quick");
+    if (quickGrid) quickGrid.style.display = (S.activeTeamId || S.activeTutorId) ? "none" : "flex";
     const h = document.getElementById("hero-title");
     if (h && !S.activeTeamId && !S.activeTutorId && S.cfg.workMode !== "task" && S.user) {
       const hr = new Date().getHours();
       const greet = hr < 11 ? "Chào buổi sáng" : (hr < 14 ? "Chào buổi trưa" : (hr < 18 ? "Chào buổi chiều" : "Chào buổi tối"));
-      const firstName = (S.user.name || S.user.email.split("@")[0]).trim().split(/\s+/).pop();
-      h.textContent = `${greet}, ${firstName}.`;
+      const fullName = (S.user.name || S.user.email.split("@")[0]).trim();
+      h.textContent = `${greet}, ${fullName}.`;
     }
   }
 
@@ -568,7 +570,7 @@
           <span class="cx-row-r">›</span>
         </button>
         <button type="button" class="cx-row tap-soft" onclick="checkAppUpdate(false)">
-          <span class="cx-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>Giới thiệu (API AI v5.0)</span></span>
+          <span class="cx-row-l"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>Giới thiệu (API AI v6.0)</span></span>
           <span class="cx-row-r"><span>v${esc(META.verName || "5.0")}</span><span>›</span></span>
         </button>
         <button type="button" class="cx-row tap-soft" onclick="openAdvancedSettingsModal()">
@@ -1407,7 +1409,7 @@
   window.stopStudioSpeak = function () { try { speechSynthesis.cancel(); } catch {} };
 
   // HUB 5: CONNECTORS (24 SERVICES + CUSTOM MCP + VIETNAMESE SKILL STORE)
-  const OAUTH_CONNECTORS_24 = [
+  const OAUTH_CONNECTORS_24 = window.OAUTH_CONNECTORS_24 = [
     { id: "gmail", name: "Gmail", short: "M", color: "#EA4335", hint: "Đọc & soạn thư tự động qua MCP" },
     { id: "gdrive", name: "Google Drive", short: "GD", color: "#0F9D58", hint: "Tìm kiếm & đọc tài liệu Google Drive" },
     { id: "gcal", name: "Google Calendar", short: "31", color: "#4285F4", hint: "Xem lịch & tạo sự kiện nhắc học/họp" },
@@ -1434,7 +1436,7 @@
     { id: "github", name: "GitHub", short: "GH", color: "#24292F", hint: "Đọc Repo, Issue & Pull Request GitHub" }
   ];
 
-  const VI_SKILL_STORE = [
+  const VI_SKILL_STORE = window.VI_SKILL_STORE = [
     { id: "sk-humanizer-vi", name: "humanizer-vi", desc: "Viết lại văn bản AI thành tiếng Việt tự nhiên, sạch văn mẫu", prompt: "Biên tập lại văn bản sang tiếng Việt tự nhiên như người thật viết. Bỏ các từ sáo rỗng, rút gọn câu dài lê thê, giữ 100% ý chính." },
     { id: "sk-grammar-vi", name: "grammar-checker-vi", desc: "Soát chính tả, ngữ pháp, dấu câu và lỗi lặp từ tiếng Việt", prompt: "Soát kỹ chính tả, dấu thanh, lỗi đánh máy và cấu trúc câu tiếng Việt. Liệt kê rõ lỗi sửa (Cũ → Mới) rồi xuất bản hoàn chỉnh." },
     { id: "sk-style-vi", name: "style-guide-vi", desc: "Chuẩn hóa văn phong nhất quán theo tông thương hiệu / học thuật", prompt: "Chuẩn hóa toàn bộ văn bản theo đúng 1 tông giọng nhất quán, thuật ngữ thống nhất, phân cấp tiêu đề rõ ràng." },
