@@ -122,7 +122,7 @@
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 
-  async function loadPublicAuthConfig() {
+  const loadPublicAuthConfig = window.loadPublicAuthConfig = async function () {
     try {
       const r = await apiFetch("/public/auth-config", { auth: false });
       if (r.ok) V50.publicAuthCfg = await r.json();
@@ -160,7 +160,7 @@
     haptic("tap");
     const cid = (V50.publicAuthCfg?.googleClientId || "").trim();
     if (!cid) {
-      showToast("Admin chưa dán Google OAuth Client ID trong Quản trị → VietQR & Google", "warn");
+      showToast("Đăng nhập Google đang tạm bảo trì. Bạn vui lòng đăng nhập bằng Email và Mật khẩu.", "warn");
       return;
     }
     if (isNativeApk()) {
@@ -1976,5 +1976,6 @@
     updateQuotaRingAndGreeting();
     window.renderModelDropdown();
     if (typeof setWorkMode === "function") setWorkMode(S.cfg?.workMode || "chat", false);
+    updateQuotaRingAndGreeting();
   }, 350);
 })();
